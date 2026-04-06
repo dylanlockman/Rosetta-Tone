@@ -11,6 +11,7 @@ export default function TrackContainer() {
   const beats = useStore(s => s.beats);
   const setCurrentBeat = useStore(s => s.setCurrentBeat);
   const containerRef = useRef(null);
+  const notationRef = useRef(null);
   const [dragging, setDragging] = useState(false);
 
   const handleScrub = useCallback((clientX) => {
@@ -53,23 +54,7 @@ export default function TrackContainer() {
       style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
     >
       <div className="relative" style={{ width: totalWidth }}>
-        {/* Row 1: Sheet music */}
-        <div className="border-b border-slate-800 py-2">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1">
-            Sheet Music
-          </div>
-          <NotationView />
-        </div>
-
-        {/* Row 2: Tab */}
-        <div className="border-b border-slate-800 py-2">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1">
-            Tab
-          </div>
-          <TabView />
-        </div>
-
-        {/* Row 3: Piano (sticky) */}
+        {/* Row 1: Piano (sticky) */}
         <div className="border-b border-slate-800 py-2">
           <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1 sticky left-0">
             Piano
@@ -80,6 +65,28 @@ export default function TrackContainer() {
           >
             <Piano />
           </div>
+        </div>
+
+        {/* Rows 2 + 3: Sheet music + Tab — share the playhead */}
+        <div ref={notationRef} className="relative">
+          {/* Row 2: Sheet music */}
+          <div className="border-b border-slate-800 py-2">
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1">
+              Sheet Music
+            </div>
+            <NotationView />
+          </div>
+
+          {/* Row 3: Tab */}
+          <div className="border-b border-slate-800 py-2">
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1">
+              Tab
+            </div>
+            <TabView />
+          </div>
+
+          {/* Playhead spans only sheet music + tab */}
+          <Playhead />
         </div>
 
         {/* Row 4: Fretboard (sticky) */}
@@ -94,9 +101,6 @@ export default function TrackContainer() {
             <Fretboard />
           </div>
         </div>
-
-        {/* Playhead overlay — spans all rows */}
-        <Playhead />
       </div>
     </div>
   );

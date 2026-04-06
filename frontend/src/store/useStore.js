@@ -13,6 +13,15 @@ export const useStore = create((set, get) => ({
   chordLibrary: [],
   loading: false,
   error: null,
+  bpm: 90,
+  isPlaying: false,
+  instrument: 'piano', // 'piano' | 'guitar'
+  audioEnabled: true,
+
+  setBpm: (bpm) => set({ bpm: Math.max(20, Math.min(300, Number(bpm) || 90)) }),
+  setInstrument: (instrument) => set({ instrument }),
+  toggleAudio: () => set({ audioEnabled: !get().audioEnabled }),
+  setIsPlaying: (isPlaying) => set({ isPlaying }),
 
   fetchSongs: async () => {
     set({ loading: true, error: null });
@@ -87,3 +96,4 @@ export const useStore = create((set, get) => ({
     set({ currentBeat: clamped });
   },
 }));
+

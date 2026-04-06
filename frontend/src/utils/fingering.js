@@ -1,24 +1,23 @@
-// Fingering inference: given parsed beats from tabParser and a chord library
-// from the backend, enrich each beat's notes with a `finger` field (0-4).
+// Fingering inference: enrich each beat's notes with a `finger` field (0-4).
 //
 // Strategy:
-//   1. For each beat, build a signature of its (string, fret) positions.
-//      Compare against every chord in the library; if any chord's *fretted*
-//      positions exactly match the beat's *fretted* positions, copy the
-//      finger numbers from that chord.
-//   2. Otherwise, fall back to a heuristic: sort fretted notes by ascending
-//      fret, assign fingers 1..4 in order. Open strings (fret 0) get 0.
-//      If more than 4 fretted notes, extras reuse finger 1 (barre).
+//   1. Chord match: if a beat's fretted positions exactly equal those of a
+//      chord in the library, copy that chord's fingerings.
+//   2. Otherwise (typically melody notes), use a positional / one-finger-per-fret
+//      assignment: determine the local "hand position" (lowest fret in a sliding
+//      window around the beat) and assign finger = (fret - position + 1),
+//      clamped to 1..4. Open strings (fret 0) get finger 0.
 //
-// The chord library shape (from /api/chords/all/full):
-//   [{ id, name, tuning, fingering: [{string, fret, finger}, ...] }, ...]
-// Muted positions in the library use fret = -1 and are ignored.
+// This is much more accurate for melodies than the old heuristic, which
+// always assigned finger 1 to single notes regardless of where they sat
+// on the neck.
+
+const POSITION_WINDOW = 6; // beats on each side of current beat to consider
 
 function frettedPositions(positions) {
   return positions.filter(p => p.fret > 0);
 }
 
-// Build a sorted, comparable string signature of the fretted positions.
 function signature(positions) {
   return frettedPositions(positions)
     .map(p => `${p.string}:${p.fret}`)
@@ -28,7 +27,7 @@ function signature(positions) {
 
 function matchChord(beat, chordLibrary) {
   const beatSig = signature(beat.notes);
-  if (!beatSig) return null; // beat is all open strings — no chord match
+  if (!beatSig) return null;
   for (const chord of chordLibrary) {
     if (signature(chord.fingering) === beatSig) return chord;
   }
@@ -36,7 +35,6 @@ function matchChord(beat, chordLibrary) {
 }
 
 function applyChordFingering(beat, chord) {
-  // Build a lookup from string number to finger from the chord
   const fingerByString = new Map();
   for (const p of chord.fingering) {
     fingerByString.set(p.string, p.finger);
@@ -50,29 +48,43 @@ function applyChordFingering(beat, chord) {
   }
 }
 
-function applyHeuristic(beat) {
-  const fretted = beat.notes
-    .filter(n => n.fret > 0)
-    .sort((a, b) => a.fret - b.fret || a.string - b.string);
+// Determine hand position (lowest fretted note) in a window around beatIdx.
+// Open strings (fret 0) are ignored when picking the position.
+function localPosition(beats, beatIdx) {
+  const start = Math.max(0, beatIdx - POSITION_WINDOW);
+  const end = Math.min(beats.length - 1, beatIdx + POSITION_WINDOW);
+  let minFret = Infinity;
+  for (let i = start; i <= end; i++) {
+    for (const n of beats[i].notes) {
+      if (n.fret > 0 && n.fret < minFret) minFret = n.fret;
+    }
+  }
+  return minFret === Infinity ? 1 : minFret;
+}
 
-  fretted.forEach((note, i) => {
-    note.finger = Math.min(i + 1, 4) || 1;
-  });
-
+function applyPositional(beat, position) {
   for (const note of beat.notes) {
-    if (note.fret === 0) note.finger = 0;
-    if (note.finger == null) note.finger = 0;
+    if (note.fret === 0) {
+      note.finger = 0;
+      continue;
+    }
+    let f = note.fret - position + 1;
+    if (f < 1) f = 1;
+    if (f > 4) f = 4;
+    note.finger = f;
   }
 }
 
 export function inferFingerings(beats, chordLibrary = []) {
-  for (const beat of beats) {
+  for (let i = 0; i < beats.length; i++) {
+    const beat = beats[i];
     const matched = matchChord(beat, chordLibrary);
     if (matched) {
       applyChordFingering(beat, matched);
       beat.matchedChord = matched.name;
     } else {
-      applyHeuristic(beat);
+      const position = localPosition(beats, i);
+      applyPositional(beat, position);
       beat.matchedChord = null;
     }
   }
