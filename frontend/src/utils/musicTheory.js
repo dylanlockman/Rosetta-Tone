@@ -30,6 +30,26 @@ export function fretToNote(stringNumber, fret) {
   return midiToNote(baseMidi + fret);
 }
 
+// Return chords from the library whose pitch classes are all members of the scale.
+export function getChordsInKey(scaleNotes, chordLibrary) {
+  if (!scaleNotes || scaleNotes.length === 0 || !chordLibrary) return [];
+  const scaleSet = new Set(scaleNotes);
+  return chordLibrary.filter(chord => {
+    if (!chord.fingering || chord.fingering.length === 0) return false;
+    const pitchClasses = new Set();
+    for (const f of chord.fingering) {
+      if (f.fret < 0) continue; // muted string
+      const info = fretToNote(f.string, f.fret);
+      if (info) pitchClasses.add(info.note);
+    }
+    if (pitchClasses.size === 0) return false;
+    for (const pc of pitchClasses) {
+      if (!scaleSet.has(pc)) return false;
+    }
+    return true;
+  });
+}
+
 // intervals is a comma-separated string of semitone steps, e.g. "2,2,1,2,2,2,1"
 export function getScaleNotes(root, intervalsStr) {
   const rootIdx = CHROMATIC_SCALE.indexOf(root);

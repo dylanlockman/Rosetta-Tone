@@ -78,6 +78,23 @@ function applyPositional(beat, position) {
 export function inferFingerings(beats, chordLibrary = []) {
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
+
+    // Continuity: if this beat has the same fret pattern as the previous beat,
+    // reuse the previous fingering to avoid spurious hand-position changes
+    // within repeated chords/arpeggios.
+    if (i > 0) {
+      const prevSig = signature(beats[i - 1].notes);
+      const curSig = signature(beat.notes);
+      if (prevSig === curSig && prevSig !== '') {
+        for (const note of beat.notes) {
+          const prev = beats[i - 1].notes.find(pn => pn.string === note.string);
+          note.finger = prev ? prev.finger : 0;
+        }
+        beat.matchedChord = beats[i - 1].matchedChord;
+        continue;
+      }
+    }
+
     const matched = matchChord(beat, chordLibrary);
     if (matched) {
       applyChordFingering(beat, matched);

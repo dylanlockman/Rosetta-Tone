@@ -1,6 +1,6 @@
 # Process Tab URL — Claude Code Instructions
 
-This prompt tells Claude Code how to scrape a guitar tab from a website and load it into the GearBoard library. It replaces a traditional scraper with a human-in-the-loop workflow.
+This prompt tells Claude Code how to scrape a guitar tab from a website and load it into the RosettaTone library. It replaces a traditional scraper with a human-in-the-loop workflow.
 
 ## Trigger
 
@@ -36,7 +36,7 @@ If you can't find a clean 6-line tab on the page (e.g. the page has chord-only c
 
 ### 3. Insert via API
 
-The GearBoard backend must be running on `http://localhost:4000`. POST the extracted data using the `Bash` tool:
+The RosettaTone backend must be running on `http://localhost:4000`. POST the extracted data using the `Bash` tool:
 
 ```bash
 curl -X POST http://localhost:4000/api/songs \
@@ -56,7 +56,7 @@ The API responds with `{"id": <number>}` on success.
 
 ### 4. Confirm
 
-Tell the user the song was added (mention the title, artist, and assigned id) and that they can refresh the GearBoard library panel to see it.
+Tell the user the song was added (mention the title, artist, and assigned id) and that they can refresh the RosettaTone library panel to see it.
 
 ## Notes for Claude
 

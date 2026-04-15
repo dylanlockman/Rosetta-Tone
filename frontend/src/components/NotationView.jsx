@@ -2,18 +2,14 @@ import { useEffect, useRef } from 'react';
 import { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } from 'vexflow';
 import { useStore } from '../store/useStore.js';
 import { getFingerColor, isOpen } from '../utils/noteColors.js';
+import { noteToMidi } from '../utils/musicTheory.js';
 import { BEAT_WIDTH, LEFT_GUTTER } from './trackLayout.js';
 
 const NOTES_PER_MEASURE = 4;
-const MEASURE_WIDTH = NOTES_PER_MEASURE * BEAT_WIDTH;
 const STAVE_HEIGHT = 110;
 
 function toVexKey(note, octave) {
   return `${note.toLowerCase()}/${octave}`;
-}
-
-function noteHasAccidental(note) {
-  return note.includes('#') || note.includes('b');
 }
 
 export default function NotationView() {
@@ -25,8 +21,6 @@ export default function NotationView() {
     containerRef.current.innerHTML = '';
     if (beats.length === 0) return;
 
-    const numMeasures = Math.ceil(beats.length / NOTES_PER_MEASURE);
-    // Total width must match the tab grid: LEFT_GUTTER + beats * BEAT_WIDTH
     const totalWidth = LEFT_GUTTER + beats.length * BEAT_WIDTH + 40;
 
     const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
@@ -43,13 +37,9 @@ export default function NotationView() {
 
     measures.forEach((measure, measureIdx) => {
       const isFirst = measureIdx === 0;
-      // Stave x corresponds to where the FIRST beat of this measure should sit
-      // minus space for the clef on the first measure.
       const firstBeatIdx = measureIdx * NOTES_PER_MEASURE;
       const firstBeatCenterX = LEFT_GUTTER + firstBeatIdx * BEAT_WIDTH + BEAT_WIDTH / 2;
 
-      // We want stave note-start to be a bit before firstBeatCenterX so notes align
-      // to beat centers. The stave x is the left edge; clef takes up gutter on first.
       const staveX = isFirst ? 10 : firstBeatCenterX - BEAT_WIDTH / 2;
       const staveWidth = isFirst
         ? (firstBeatCenterX - BEAT_WIDTH / 2) + NOTES_PER_MEASURE * BEAT_WIDTH - 10
@@ -62,16 +52,21 @@ export default function NotationView() {
       stave.draw();
 
       const notes = measure.map(beat => {
-        const sorted = [...beat.notes].sort((a, b) => {
-          const am = (a.octave + 1) * 12;
-          const bm = (b.octave + 1) * 12;
-          return bm - am;
-        });
+        // Filter to valid notes and sort low-to-high (VexFlow requirement)
+        const valid = beat.notes.filter(n => noteToMidi(n.note, n.octave) != null);
+        if (valid.length === 0) {
+          return new StaveNote({ keys: ['b/4'], duration: 'qr' });
+        }
+        const sorted = [...valid].sort((a, b) =>
+          noteToMidi(a.note, a.octave) - noteToMidi(b.note, b.octave)
+        );
         const keys = sorted.map(n => toVexKey(n.note, n.octave));
         const note = new StaveNote({ keys, duration: 'q', clef: 'treble' });
         sorted.forEach((n, i) => {
-          if (noteHasAccidental(n.note)) {
+          if (n.note.includes('#')) {
             note.addModifier(new Accidental('#'), i);
+          } else if (n.note.includes('b')) {
+            note.addModifier(new Accidental('b'), i);
           }
         });
         const fingered = sorted.find(n => !isOpen(n.finger));
@@ -89,17 +84,23 @@ export default function NotationView() {
       voice.addTickables(notes);
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 40);
 
-      // After formatting, force each real note to land at its tab beat center
+      // Draw first, then apply post-draw alignment correction
+      voice.draw(context, stave);
+
+      // Post-draw: move each note's SVG group to its exact target X
       notes.forEach((note, i) => {
         if (i >= measure.length) return; // rest pad
         const beat = measure[i];
-        const targetAbsX = LEFT_GUTTER + beat.beatIndex * BEAT_WIDTH + BEAT_WIDTH / 2;
-        const currentAbsX = note.getAbsoluteX();
-        const currentShift = note.getXShift ? note.getXShift() : (note.x_shift || 0);
-        note.setXShift(currentShift + (targetAbsX - currentAbsX));
+        const targetX = LEFT_GUTTER + beat.beatIndex * BEAT_WIDTH + BEAT_WIDTH / 2;
+        const actualX = note.getAbsoluteX();
+        const delta = targetX - actualX;
+        if (Math.abs(delta) > 0.5) {
+          const el = note.getSVGElement ? note.getSVGElement() : null;
+          if (el) {
+            el.setAttribute('transform', `translate(${delta}, 0)`);
+          }
+        }
       });
-
-      voice.draw(context, stave);
     });
   }, [beats]);
 

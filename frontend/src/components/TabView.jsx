@@ -40,10 +40,10 @@ export default function TabView() {
             className="absolute left-0 right-0 flex items-center"
             style={{ top: y + 6, height: STRING_ROW_HEIGHT }}
           >
-            {/* String label in left gutter */}
+            {/* String label — aligned with clef area */}
             <span
               className="text-slate-400 absolute"
-              style={{ left: LEFT_GUTTER - 24, width: 16, textAlign: 'right' }}
+              style={{ left: 8, width: 16, textAlign: 'right' }}
             >
               {label}
             </span>

@@ -15,5 +15,5 @@ app.use('/api/scales', scalesRouter);
 app.use('/api/chords', chordsRouter);
 
 app.listen(PORT, () => {
-  console.log(`GearBoard API running on http://localhost:${PORT}`);
+  console.log(`RosettaTone API running on http://localhost:${PORT}`);
 });

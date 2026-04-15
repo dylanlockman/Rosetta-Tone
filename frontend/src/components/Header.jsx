@@ -16,6 +16,8 @@ export default function Header() {
   const currentBeat = useStore(s => s.currentBeat);
   const bpm = useStore(s => s.bpm);
   const setBpm = useStore(s => s.setBpm);
+  const subdivision = useStore(s => s.subdivision);
+  const setSubdivision = useStore(s => s.setSubdivision);
   const isPlaying = useStore(s => s.isPlaying);
   const setIsPlaying = useStore(s => s.setIsPlaying);
   const instrument = useStore(s => s.instrument);
@@ -31,7 +33,7 @@ export default function Header() {
   return (
     <header className="flex items-center justify-between px-6 py-3 border-b border-slate-700 bg-slate-900">
       <div className="flex items-center gap-3">
-        <span className="text-xl font-bold text-cyan-400">GearBoard</span>
+        <span className="text-xl font-bold text-cyan-400">RosettaTone</span>
         {activeSong && (
           <span className="text-slate-300">
             <span className="text-slate-500 mx-2">|</span>
@@ -70,6 +72,17 @@ export default function Header() {
               className="w-14 px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-center"
             />
           </label>
+          <div className="flex items-center gap-0.5 bg-slate-800 rounded p-0.5 border border-slate-700">
+            {[{ v: 1, l: '1/4' }, { v: 2, l: '1/8' }, { v: 4, l: '1/16' }].map(({ v, l }) => (
+              <button
+                key={v}
+                onClick={() => setSubdivision(v)}
+                className={`px-1.5 py-0.5 rounded text-[10px] ${subdivision === v ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Instrument toggle */}

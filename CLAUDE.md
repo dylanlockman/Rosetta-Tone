@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**GearBoard** — a browser-based music theory companion that translates between guitar tabs, sheet music, fretboard, and piano views. Localhost-first MVP.
+**RosettaTone** — a browser-based music theory companion that translates between guitar tabs, sheet music, fretboard, and piano views. Localhost-first MVP.
 
 ## Tech Stack
 
@@ -96,12 +96,25 @@ This is a deliberate design choice — it offloads the messy scraping logic to a
 
 Standard EADGBE assumed everywhere. Open string pitches: `E2, A2, D3, G3, B3, E4`. Alternate tunings are not supported in the MVP.
 
+## Scale Explorer
+
+The Scale Explorer is available in the Library panel's Scales tab. Features:
+- Root note selector (12 chromatic buttons) + scale type list
+- Three view modes: **Full** (all notes), **Vertical** (CAGED box positions), **Diagonal** (3-notes-per-string patterns)
+- **CAGED position filter**: numbered buttons to isolate individual box patterns (vertical/diagonal modes)
+- **Octave run filter**: ROYGBIV-colored buttons to filter by octave pass
+- Boundary notes (where two octave runs meet) render with a 45° diagonal split on both fretboard and piano
+- Scale data computed in `frontend/src/utils/scalePositions.js` (CAGED + diagonal), colors in `frontend/src/utils/scaleColors.js`
+
+## Piano
+
+Full 88-key piano (A0–C8), inline sticky by default. Labels shown only on C keys for compactness.
+
 ## What's Deferred (Not Yet Built)
 
-- Scale Explorer UI (store has placeholder shape, no dropdowns/overlay logic)
-- Chord Encyclopedia panel
+- Chord Encyclopedia panel (chords list exists but no fingering diagrams/fretboard previews)
 - Bass clef on the notation view (treble only currently)
-- Duration inference in the tab parser (everything is quarter notes)
+- Duration inference in the tab parser (everything is quarter notes, subdivision selector compensates)
 - MusicXML import
 - GCP / Cloud SQL deployment
-- Audio playback
+- Settings panel for display preferences
