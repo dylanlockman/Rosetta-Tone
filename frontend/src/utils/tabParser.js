@@ -236,8 +236,10 @@ export function tabToScore(rawText, meta = {}) {
       if (events.length === 0) continue;
       const timed = timeUniform(events, cursorBeat);
       score.events.push(...timed);
+      // Continue seamlessly into the next stave. Rounding up to a bar
+      // boundary here inserts an audible dead gap between staves — with
+      // no bar lines we don't know the bar phase, so continuity wins.
       cursorBeat = timed.reduce((max, e) => Math.max(max, e.start + e.duration), cursorBeat);
-      cursorBeat = Math.ceil(cursorBeat / beatsPerBar) * beatsPerBar;
     }
   }
 
