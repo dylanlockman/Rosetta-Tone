@@ -199,7 +199,7 @@ export const useStore = create((set, get) => ({
   // `score` may be a prebuilt canonical Score (from the MusicXML/MIDI
   // importers). For plain tab pastes it's built here, so parsing happens
   // exactly once per song — at ingest.
-  addSong: async ({ title, artist, raw_content, source_type = 'tab', score = null }) => {
+  addSong: async ({ title, artist, raw_content, source_type = 'tab', score = null, source_url = null }) => {
     set({ loading: true, error: null });
     try {
       if (!score) {
@@ -209,7 +209,7 @@ export const useStore = create((set, get) => ({
         throw new Error('No notes found — check the content format.');
       }
       const { data } = await api.post('/songs', {
-        title, artist, source_type, raw_content,
+        title, artist, source_type, raw_content, source_url,
         parsed_json: serializeScore(score),
       });
       await get().fetchSongs();
