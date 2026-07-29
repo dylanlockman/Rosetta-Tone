@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useStore } from '../store/useStore.js';
+import { useStore, effectiveCapo } from '../store/useStore.js';
 import { STANDARD_TUNING, fretToNote, noteToMidi } from '../utils/musicTheory.js';
 import { getFingerColor, isOpen } from '../utils/noteColors.js';
 import { getRunInfo, getOctaveColor } from '../utils/scaleColors.js';
@@ -112,11 +112,9 @@ export default function Fretboard() {
   const activeBeat = beats[currentBeat];
   const activeNotes = activeBeat?.notes || [];
 
-  // Capo bar position: the source capo plus any capo-style key shift.
-  // Everything at this fret plays "open".
-  const capoFret = !scaleViewActive
-    ? Math.max(0, (score?.meta?.capo ?? 0) + transpose)
-    : 0;
+  // Capo bar: only drawn when the SOURCE declared a capo (a key shift moves
+  // a real capo but never conjures one). Everything at this fret plays "open".
+  const capoFret = !scaleViewActive ? effectiveCapo(score, transpose) : 0;
 
   const width = LEFT_MARGIN + (NUM_FRETS + 1) * FRET_WIDTH + 16;
   const height = TOP_MARGIN * 2 + 5 * STRING_SPACING + 14;

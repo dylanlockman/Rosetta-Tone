@@ -1,4 +1,4 @@
-import { useStore } from '../store/useStore.js';
+import { useStore, effectiveCapo } from '../store/useStore.js';
 import { getFingerColor, isOpen } from '../utils/noteColors.js';
 import { BEAT_WIDTH, LEFT_GUTTER, RIGHT_PADDING } from './trackLayout.js';
 
@@ -9,9 +9,10 @@ export default function TabView() {
   const beats = useStore(s => s.beats);
   const score = useStore(s => s.score);
   const transpose = useStore(s => s.transpose);
-  // Tab numerals are written relative to the capo (plus any key shift):
+  // Tab numerals are written relative to the capo (when the source has one):
   // relative 0 = open string at the capo, exactly like published tab.
-  const shift = (score?.meta?.capo ?? 0) + transpose;
+  // Songs without a capo always show absolute frets.
+  const shift = effectiveCapo(score, transpose);
 
   if (beats.length === 0) {
     return (

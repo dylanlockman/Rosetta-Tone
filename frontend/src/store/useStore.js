@@ -11,14 +11,23 @@ import { generateVoicings } from '../utils/chordVoicings.js';
 
 const api = axios.create({ baseURL: '/api' });
 
+// The capo shown/felt by the player: only exists when the SOURCE declared
+// one. A key shift moves a real capo, but never conjures one — shifting a
+// capo-less song leaves frets absolute and fingered from the nut.
+export function effectiveCapo(score, transpose) {
+  const sourceCapo = score?.meta?.capo ?? 0;
+  return sourceCapo > 0 ? Math.max(0, sourceCapo + transpose) : 0;
+}
+
 // Derive display beats from the canonical score: group, apply the total
-// capo-style shift (source capo + user key shift), then finger. Fingering
-// works in capo-relative frets so capo'd open strings stay finger-0.
+// pitch shift (source capo + user key shift), then finger. Fingering works
+// in capo-relative frets so capo'd open strings stay finger-0 — but only
+// when there IS a capo.
 function deriveBeats(score, transpose, chordLibrary) {
   let beats = scoreToBeats(score);
-  const shift = (score?.meta?.capo ?? 0) + transpose;
-  if (shift) beats = transposeBeats(beats, shift);
-  inferFingerings(beats, chordLibrary, shift);
+  const pitchShift = (score?.meta?.capo ?? 0) + transpose;
+  if (pitchShift) beats = transposeBeats(beats, pitchShift);
+  inferFingerings(beats, chordLibrary, effectiveCapo(score, transpose));
   return beats;
 }
 
