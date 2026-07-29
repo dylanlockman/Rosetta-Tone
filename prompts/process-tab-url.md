@@ -16,7 +16,9 @@ When the user asks something like:
 ### 1. Fetch the page
 
 Use the `WebFetch` tool with the URL the user provided. Use a prompt like:
-> "Extract the song title, artist, and the raw ASCII guitar tablature (the 6-line tab content with fret numbers and dashes). Preserve the exact tab formatting including measure bars, dashes, and fret numbers. Ignore ads, navigation, comments, chord boxes above the tab, and lyrics between tab sections."
+> "Extract the song title, artist, any capo directive (e.g. 'CAPO 7', 'capo on 1st fret'), and the raw ASCII guitar tablature (the 6-line tab content with fret numbers and dashes). Preserve the exact tab formatting including measure bars, dashes, and fret numbers. Ignore ads, navigation, comments, chord boxes above the tab, and lyrics between tab sections."
+
+**Capo is required metadata.** Many tabs are written relative to a capo — dropping the directive silently changes every sounding pitch. If the page mentions a capo anywhere, include a line `CAPO <n>` at the very top of `raw_content`. The parser (`tabToScore`) detects it (regex `capo\D{0,12}?(\d{1,2})`), stores it as `score.meta.capo`, and the app shifts sounding pitch, draws the capo bar on the fretboard, and keeps tab numerals capo-relative. If a tab says the capo applies to only part of the song (e.g. "(NO CAPO)" after the intro), note that to the user — per-section capo is not yet supported; ingest the capo'd portion.
 
 ### 2. Validate the tab content
 

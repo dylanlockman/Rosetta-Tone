@@ -7,6 +7,11 @@ const STRING_ROW_HEIGHT = 22;
 
 export default function TabView() {
   const beats = useStore(s => s.beats);
+  const score = useStore(s => s.score);
+  const transpose = useStore(s => s.transpose);
+  // Tab numerals are written relative to the capo (plus any key shift):
+  // relative 0 = open string at the capo, exactly like published tab.
+  const shift = (score?.meta?.capo ?? 0) + transpose;
 
   if (beats.length === 0) {
     return (
@@ -85,7 +90,7 @@ export default function TabView() {
                   }}
                   title={`${note.note}${note.octave} (finger ${note.finger})`}
                 >
-                  {note.fret}
+                  {note.fret - shift >= 0 ? note.fret - shift : note.fret}
                 </span>
               );
             })}

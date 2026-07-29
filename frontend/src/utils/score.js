@@ -46,6 +46,10 @@ export function createScore(meta = {}, events = []) {
       timeSignature: meta.timeSignature ?? [4, 4],
       keyRoot: meta.keyRoot ?? null,
       keyMode: meta.keyMode ?? null,
+      // Capo fret from the source. Events are stored capo-RELATIVE (exactly
+      // as written in the tab); the capo shift is applied when beats are
+      // derived, so sounding pitch and fretboard positions come out true.
+      capo: meta.capo ?? 0,
     },
     events,
   };

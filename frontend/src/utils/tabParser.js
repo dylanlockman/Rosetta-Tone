@@ -20,6 +20,8 @@ import { createScore, createEvent, scoreToBeats } from './score.js';
 
 const STRING_LABEL_RE = /^\s*([eEbBgGdDaA])\s*(\|)/;
 const SECTION_RE = /^\s*\[([^\]]+)\]\s*$/; // [Intro], [Verse 1], [Solo] …
+// "CAPO 7", "Capo: 7", "capo on 1st fret", "(with capo on 2nd fret)" …
+const CAPO_RE = /capo\D{0,12}?(\d{1,2})/i;
 const BEAT_QUANT = 0.25; // sixteenth-note grid
 
 function isTabLine(line) {
@@ -197,7 +199,15 @@ function timeUniform(measureEvents, startBeat) {
 export function tabToScore(rawText, meta = {}) {
   const timeSignature = meta.timeSignature ?? [4, 4];
   const beatsPerBar = (timeSignature[0] * 4) / timeSignature[1];
-  const score = createScore({ ...meta, source: 'ascii-tab', timeSignature });
+
+  // Capture a capo directive anywhere in the header text. Fret numbers in
+  // the tab stay capo-relative; meta.capo carries the shift.
+  let capo = meta.capo ?? 0;
+  if (rawText && !capo) {
+    const m = rawText.match(CAPO_RE);
+    if (m) capo = Math.min(12, parseInt(m[1], 10));
+  }
+  const score = createScore({ ...meta, source: 'ascii-tab', timeSignature, capo });
 
   if (!rawText) return score;
   const staves = findStaves(rawText.split(/\r?\n/));

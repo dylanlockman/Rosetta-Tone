@@ -107,8 +107,16 @@ export default function Fretboard() {
   const scalePlayhead = useStore(s => s.scalePlayhead);
   const hoverMidi = useStore(s => s.hoverMidi);
   const setHoverMidi = useStore(s => s.setHoverMidi);
+  const score = useStore(s => s.score);
+  const transpose = useStore(s => s.transpose);
   const activeBeat = beats[currentBeat];
   const activeNotes = activeBeat?.notes || [];
+
+  // Capo bar position: the source capo plus any capo-style key shift.
+  // Everything at this fret plays "open".
+  const capoFret = !scaleViewActive
+    ? Math.max(0, (score?.meta?.capo ?? 0) + transpose)
+    : 0;
 
   const width = LEFT_MARGIN + (NUM_FRETS + 1) * FRET_WIDTH + 16;
   const height = TOP_MARGIN * 2 + 5 * STRING_SPACING + 14;
@@ -285,6 +293,25 @@ export default function Fretboard() {
           fontFamily='"JetBrains Mono", monospace'
         >{fret}</text>
       ))}
+
+      {/* Capo bar — the clamp across the neck; this fret is now "open" */}
+      {capoFret > 0 && capoFret <= NUM_FRETS && (() => {
+        const cx = LEFT_MARGIN + capoFret * FRET_WIDTH - FRET_WIDTH + 6;
+        return (
+          <g>
+            <rect x={cx} y={neckTop - 6}
+              width={9} height={neckHeight + 12}
+              rx={4.5} fill="#1D2027" stroke="#F5B848" strokeWidth={1.5} />
+            <rect x={cx + 2.5} y={neckTop - 2}
+              width={4} height={neckHeight + 4}
+              rx={2} fill="rgba(245,184,72,0.35)" />
+            <text x={cx + 4.5} y={neckTop - 11}
+              fill="#F5B848" fontSize="8.5" fontWeight="700" textAnchor="middle"
+              fontFamily='"JetBrains Mono", monospace'
+            >CAPO</text>
+          </g>
+        );
+      })()}
 
       {/* Strings */}
       {STANDARD_TUNING.map((open, idx) => (

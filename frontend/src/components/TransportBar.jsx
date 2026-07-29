@@ -226,6 +226,16 @@ export default function TransportBar() {
         </Stepper>
       </div>
 
+      {/* Capo indicator — from the source tab; key shift stacks on top */}
+      {hasSong && (score?.meta?.capo ?? 0) > 0 && (
+        <div
+          className="px-2 py-0.5 rounded-md border border-gold-500/50 text-gold-400 text-[10px] font-mono font-semibold tracking-wide"
+          title={`Source tab written for capo ${score.meta.capo} — notes sound at true pitch`}
+        >
+          CAPO {score.meta.capo}
+        </div>
+      )}
+
       {/* Key shift (song mode only) — capo-style transpose */}
       {hasSong && (
         <div className="flex items-center gap-2">

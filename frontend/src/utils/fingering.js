@@ -14,19 +14,27 @@
 
 const POSITION_WINDOW = 6; // beats on each side of current beat to consider
 
-function frettedPositions(positions) {
-  return positions.filter(p => p.fret > 0);
+// With a capo (or capo-style key shift), the hand plays in capo-relative
+// frets: relative 0 IS an open string. `shift` converts absolute → relative.
+function relFret(fret, shift) {
+  if (fret == null) return null;
+  const rel = fret - shift;
+  return rel >= 0 ? rel : fret; // remapped out-of-pattern note: treat absolute
 }
 
-function signature(positions) {
-  return frettedPositions(positions)
-    .map(p => `${p.string}:${p.fret}`)
+function frettedPositions(positions, shift = 0) {
+  return positions.filter(p => relFret(p.fret, shift) > 0);
+}
+
+function signature(positions, shift = 0) {
+  return frettedPositions(positions, shift)
+    .map(p => `${p.string}:${relFret(p.fret, shift)}`)
     .sort()
     .join(',');
 }
 
-function matchChord(beat, chordLibrary) {
-  const beatSig = signature(beat.notes);
+function matchChord(beat, chordLibrary, shift = 0) {
+  const beatSig = signature(beat.notes, shift);
   if (!beatSig) return null;
   for (const chord of chordLibrary) {
     if (signature(chord.fingering) === beatSig) return chord;
@@ -34,54 +42,57 @@ function matchChord(beat, chordLibrary) {
   return null;
 }
 
-function applyChordFingering(beat, chord) {
+function applyChordFingering(beat, chord, shift = 0) {
   const fingerByString = new Map();
   for (const p of chord.fingering) {
     fingerByString.set(p.string, p.finger);
   }
   for (const note of beat.notes) {
-    if (note.fret == null) {
+    const rel = relFret(note.fret, shift);
+    if (rel == null) {
       note.finger = null; // not on the guitar (out-of-range piano note)
-    } else if (note.fret === 0) {
-      note.finger = 0;
+    } else if (rel === 0) {
+      note.finger = 0; // open (or capo'd open)
     } else {
       note.finger = fingerByString.get(note.string) ?? 0;
     }
   }
 }
 
-// Determine hand position (lowest fretted note) in a window around beatIdx.
-// Open strings (fret 0) are ignored when picking the position.
-function localPosition(beats, beatIdx) {
+// Determine hand position (lowest fretted note, capo-relative) in a window
+// around beatIdx. Open strings are ignored when picking the position.
+function localPosition(beats, beatIdx, shift = 0) {
   const start = Math.max(0, beatIdx - POSITION_WINDOW);
   const end = Math.min(beats.length - 1, beatIdx + POSITION_WINDOW);
   let minFret = Infinity;
   for (let i = start; i <= end; i++) {
     for (const n of beats[i].notes) {
-      if (n.fret > 0 && n.fret < minFret) minFret = n.fret;
+      const rel = relFret(n.fret, shift);
+      if (rel > 0 && rel < minFret) minFret = rel;
     }
   }
   return minFret === Infinity ? 1 : minFret;
 }
 
-function applyPositional(beat, position) {
+function applyPositional(beat, position, shift = 0) {
   for (const note of beat.notes) {
-    if (note.fret == null) {
+    const rel = relFret(note.fret, shift);
+    if (rel == null) {
       note.finger = null; // not on the guitar (out-of-range piano note)
       continue;
     }
-    if (note.fret === 0) {
-      note.finger = 0;
+    if (rel === 0) {
+      note.finger = 0; // open (or capo'd open)
       continue;
     }
-    let f = note.fret - position + 1;
+    let f = rel - position + 1;
     if (f < 1) f = 1;
     if (f > 4) f = 4;
     note.finger = f;
   }
 }
 
-export function inferFingerings(beats, chordLibrary = []) {
+export function inferFingerings(beats, chordLibrary = [], shift = 0) {
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
 
@@ -89,8 +100,8 @@ export function inferFingerings(beats, chordLibrary = []) {
     // reuse the previous fingering to avoid spurious hand-position changes
     // within repeated chords/arpeggios.
     if (i > 0) {
-      const prevSig = signature(beats[i - 1].notes);
-      const curSig = signature(beat.notes);
+      const prevSig = signature(beats[i - 1].notes, shift);
+      const curSig = signature(beat.notes, shift);
       if (prevSig === curSig && prevSig !== '') {
         for (const note of beat.notes) {
           const prev = beats[i - 1].notes.find(pn => pn.string === note.string);
@@ -101,13 +112,13 @@ export function inferFingerings(beats, chordLibrary = []) {
       }
     }
 
-    const matched = matchChord(beat, chordLibrary);
+    const matched = matchChord(beat, chordLibrary, shift);
     if (matched) {
-      applyChordFingering(beat, matched);
+      applyChordFingering(beat, matched, shift);
       beat.matchedChord = matched.name;
     } else {
-      const position = localPosition(beats, i);
-      applyPositional(beat, position);
+      const position = localPosition(beats, i, shift);
+      applyPositional(beat, position, shift);
       beat.matchedChord = null;
     }
   }

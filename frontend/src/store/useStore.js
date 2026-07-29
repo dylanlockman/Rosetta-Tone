@@ -11,11 +11,14 @@ import { generateVoicings } from '../utils/chordVoicings.js';
 
 const api = axios.create({ baseURL: '/api' });
 
-// Derive display beats from the canonical score: group, transpose, finger.
+// Derive display beats from the canonical score: group, apply the total
+// capo-style shift (source capo + user key shift), then finger. Fingering
+// works in capo-relative frets so capo'd open strings stay finger-0.
 function deriveBeats(score, transpose, chordLibrary) {
   let beats = scoreToBeats(score);
-  if (transpose) beats = transposeBeats(beats, transpose);
-  inferFingerings(beats, chordLibrary);
+  const shift = (score?.meta?.capo ?? 0) + transpose;
+  if (shift) beats = transposeBeats(beats, shift);
+  inferFingerings(beats, chordLibrary, shift);
   return beats;
 }
 
