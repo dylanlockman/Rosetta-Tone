@@ -85,7 +85,7 @@ Keyboard: **Space** play/pause (song or scale, context-aware), **←/→** step 
 
 Panels are resizable (piano height, guitar height, library width) via `useResizable.jsx` drag handles; sizes persist in localStorage. Both instrument SVGs scale to fill their panel (`viewBox` + meet). Panel labels sit top-right; the finger legend sits top-left of the guitar panel in song mode. The bottom transport drives **both** song playback and scale playback (in scale view the play button, counter, and progress reflect the pattern sequence).
 
-**Cross-highlight**: hovering any note on the fretboard or piano sets `hoverMidi` in the store; the other instrument shows dashed gold rings on every matching position. (A structural "Pitch Map" view — strings plotted in pitch space above the keys — is the planned follow-up.)
+**Cross-highlight**: hovering any note on the fretboard or piano sets `hoverMidi` in the store; the other instrument shows dashed gold rings on every matching position.
 
 ### API
 
@@ -123,7 +123,7 @@ Standard EADGBE assumed everywhere. Open string pitches: `E2, A2, D3, G3, B3, E4
 
 The Scale Explorer is available in the Library panel's Scales tab. Features:
 - Root note selector (12 chromatic buttons) + scale type list
-- Three view modes: **Full** (all notes), **Vertical** (CAGED box positions), **Diagonal** (3-notes-per-string patterns)
+- Four view modes: **Full** (all notes), **Vertical** (CAGED box positions), **Diagonal** (3-notes-per-string patterns), **Pitch Map** (`PitchMap.jsx`: each string drawn as a row in true pitch space over a mini piano strip, so every fret dot — labeled with its fret number — sits directly above the key it sounds; same pitch stacks into vertical columns. Octave colors, filters, playback halo, and a vertical hover/playhead guide line all apply)
 - **CAGED position filter**: numbered buttons to isolate individual box patterns (vertical/diagonal modes)
 - **Octave run filter**: ROYGBIV-colored buttons to filter by octave pass
 - Boundary notes (where two octave runs meet) render with a 45° diagonal split on both fretboard and piano

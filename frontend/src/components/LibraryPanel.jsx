@@ -201,7 +201,7 @@ function ScaleControls() {
       <div>
         <div className="panel-label mb-1">View</div>
         <div className="flex gap-0.5 bg-ink-850 rounded-lg p-0.5 border border-ink-700/50">
-          {[{ v: 'full', l: 'Full' }, { v: 'vertical', l: 'Vertical' }, { v: 'diagonal', l: 'Diagonal' }].map(({ v, l }) => (
+          {[{ v: 'full', l: 'Full' }, { v: 'vertical', l: 'Vert' }, { v: 'diagonal', l: 'Diag' }, { v: 'pitchmap', l: 'Pitch Map' }].map(({ v, l }) => (
             <button key={v} onClick={() => {
                 setScaleViewMode(v);
                 // Filters are sticky across view switches; only clamp if the

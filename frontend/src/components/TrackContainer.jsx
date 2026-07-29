@@ -8,6 +8,7 @@ import Playhead from './Playhead.jsx';
 import ScaleStaff from './ScaleStaff.jsx';
 import ChordStaff from './ChordStaff.jsx';
 import ChordBox from './ChordBox.jsx';
+import PitchMap from './PitchMap.jsx';
 import { usePanelSize, DragHandle } from './useResizable.jsx';
 import { generateVoicings } from '../utils/chordVoicings.js';
 import { fretToNote } from '../utils/musicTheory.js';
@@ -190,6 +191,18 @@ function ScaleView({ activeScale, chordsInKey }) {
     }
     return [...groups.entries()];
   }, [filteredChords]);
+
+  // Pitch Map mode takes the whole middle area — it IS the alignment view
+  if (scaleViewMode === 'pitchmap') {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden relative">
+        <div className="panel-label absolute top-3 right-4 z-10">
+          Pitch Map · {activeScale.root} {activeScale.name} — every fret above the key it sounds
+        </div>
+        <PitchMap />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden anim-fade-up">
