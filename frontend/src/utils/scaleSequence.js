@@ -46,6 +46,7 @@ export function buildScaleSequence({
   selectedCagedPosition,
   selectedOctaveRun,
   scaleOctaveRuns,
+  scaleCapo = 0,
 }) {
   if (!activeScale?.notes?.length) return [];
 
@@ -60,8 +61,9 @@ export function buildScaleSequence({
   }
 
   // Full view: walk the octave runs pitch by pitch, choosing the fretboard
-  // position closest to where the hand already is.
-  const allPositions = computeScaleFretPositions(activeScale.notes);
+  // position closest to where the hand already is. With a capo, only
+  // positions at or above it exist.
+  const allPositions = computeScaleFretPositions(activeScale.notes, scaleCapo);
   const byMidi = new Map();
   for (const p of allPositions) {
     if (!byMidi.has(p.midi)) byMidi.set(p.midi, []);
@@ -77,10 +79,10 @@ export function buildScaleSequence({
   }
 
   const seq = [];
-  let prevFret = 0;
-  // Movement cost plus a mild low-fret preference, so the path crosses
+  let prevFret = scaleCapo;
+  // Movement cost plus a mild near-the-capo preference, so the path crosses
   // strings the way a hand would instead of climbing one string up the neck.
-  const cost = (c) => Math.abs(c.fret - prevFret) + c.fret * 0.35;
+  const cost = (c) => Math.abs(c.fret - prevFret) + (c.fret - scaleCapo) * 0.35;
   for (const r of pitches) {
     const midi = noteToMidi(r.pitchClass, r.octave);
     const candidates = byMidi.get(midi);

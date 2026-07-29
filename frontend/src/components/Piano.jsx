@@ -78,6 +78,10 @@ export default function Piano() {
   const scalePlayhead = useStore(s => s.scalePlayhead);
   const hoverMidi = useStore(s => s.hoverMidi);
   const setHoverMidi = useStore(s => s.setHoverMidi);
+  const activeSection = useStore(s => s.activeSection);
+  const selectedChord = useStore(s => s.selectedChord);
+  // Chord view focus: only the inspected chord lights up — no song leftovers
+  const chordFocus = activeSection === 'chords' && Boolean(selectedChord);
   const activeBeat = beats[currentBeat];
   const activeNotes = activeBeat?.notes || [];
 
@@ -114,14 +118,14 @@ export default function Piano() {
   // Build active map by midi (song mode)
   const activeByMidi = useMemo(() => {
     const map = new Map();
-    if (!scaleViewActive) {
+    if (!scaleViewActive && !chordFocus) {
       for (const n of activeNotes) {
         const midi = n.midi ?? noteToMidi(n.note, n.octave);
         if (midi != null) map.set(midi, n);
       }
     }
     return map;
-  }, [scaleViewActive, activeNotes]);
+  }, [scaleViewActive, chordFocus, activeNotes]);
 
   // Check if a note passes the current filters (octave run + CAGED position)
   const passesFilter = (note, octave) => {

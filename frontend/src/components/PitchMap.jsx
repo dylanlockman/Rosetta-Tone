@@ -49,6 +49,7 @@ export default function PitchMap() {
   const scaleOctaveRuns = useStore(s => s.scaleOctaveRuns);
   const selectedOctaveRun = useStore(s => s.selectedOctaveRun);
   const scalePlayhead = useStore(s => s.scalePlayhead);
+  const scaleCapo = useStore(s => s.scaleCapo);
   const hoverMidi = useStore(s => s.hoverMidi);
   const setHoverMidi = useStore(s => s.setHoverMidi);
 
@@ -68,7 +69,7 @@ export default function PitchMap() {
     if (!activeScale || scaleOctaveRuns.length === 0) return [];
     const out = [];
     for (let stringIdx = 0; stringIdx < 6; stringIdx++) {
-      for (let fret = 0; fret <= 24; fret++) {
+      for (let fret = scaleCapo; fret <= 24; fret++) {
         const info = fretToNote(stringIdx + 1, fret);
         if (!info) continue;
         const runInfo = getRunInfo(scaleOctaveRuns, info.note, info.octave);
@@ -83,7 +84,7 @@ export default function PitchMap() {
       }
     }
     return out;
-  }, [activeScale, scaleOctaveRuns, selectedOctaveRun]);
+  }, [activeScale, scaleOctaveRuns, selectedOctaveRun, scaleCapo]);
 
   // Scale membership per midi for the key strip
   const runByMidi = useMemo(() => {

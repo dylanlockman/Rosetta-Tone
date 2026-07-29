@@ -51,15 +51,15 @@ export function prefetchNotes(midis, instrument = 'piano') {
 }
 
 // Play a cached sample with a gentle release at the requested duration.
-function playSample(buffer, duration) {
+function playSample(buffer, duration, velocity = 1) {
   const c = getCtx();
   const now = c.currentTime;
   const src = c.createBufferSource();
   src.buffer = buffer;
   const gain = c.createGain();
-  gain.gain.setValueAtTime(1, now);
+  gain.gain.setValueAtTime(velocity, now);
   const hold = Math.max(0.08, duration);
-  gain.gain.setValueAtTime(1, now + hold);
+  gain.gain.setValueAtTime(velocity, now + hold);
   gain.gain.exponentialRampToValueAtTime(0.001, now + hold + 0.25);
   src.connect(gain);
   gain.connect(masterGain);
@@ -211,9 +211,11 @@ export function playBeat(notes, instrument = 'piano', duration = 0.6) {
   for (const n of notes) {
     const midi = n.midi ?? noteToMidi(n.note, n.octave);
     if (midi == null) continue;
+    // Hammer-ons/pull-offs/slides articulate softer than picked notes
+    const velocity = n.technique ? 0.55 : 1;
     const sample = sampleCache.get(`${instrument}:${midi}`);
     if (sample) {
-      playSample(sample, duration);
+      playSample(sample, duration, velocity);
     } else {
       synth(midiToFreq(midi), duration);
       loadSample(instrument, midi); // next hit sounds real

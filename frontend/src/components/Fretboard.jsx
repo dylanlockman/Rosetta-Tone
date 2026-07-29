@@ -46,9 +46,10 @@ function SplitDot({ cx, cy, r, color1, color2, label, id, onHover }) {
   );
 }
 
-function ScaleDot({ pos, onHover }) {
+function ScaleDot({ pos, capo = 0, onHover }) {
   const cx = noteX(pos.fret);
   const cy = TOP_MARGIN + pos.stringIdx * STRING_SPACING;
+  const isOpenPos = pos.fret === capo; // at the nut, or ringing from the capo
 
   if (pos.dimmed) {
     return (
@@ -80,11 +81,11 @@ function ScaleDot({ pos, onHover }) {
   return (
     <g className="note-transition" {...onHover}>
       <circle cx={cx} cy={cy} r={DOT_RADIUS}
-        fill={pos.fret === 0 ? 'rgba(11,12,16,0.75)' : color}
-        stroke={pos.fret === 0 ? color : '#0B0C10'}
-        strokeWidth={pos.fret === 0 ? 2.5 : 2} />
+        fill={isOpenPos ? 'rgba(11,12,16,0.75)' : color}
+        stroke={isOpenPos ? color : '#0B0C10'}
+        strokeWidth={isOpenPos ? 2.5 : 2} />
       <text x={cx} y={cy + 3.5}
-        fill={pos.fret === 0 ? color : '#ffffff'}
+        fill={isOpenPos ? color : '#ffffff'}
         fontSize="9.5" fontWeight="700"
         textAnchor="middle" fontFamily='"Instrument Sans", sans-serif'
       >{pos.pitchClass}</text>
@@ -109,12 +110,22 @@ export default function Fretboard() {
   const setHoverMidi = useStore(s => s.setHoverMidi);
   const score = useStore(s => s.score);
   const transpose = useStore(s => s.transpose);
+  const activeSection = useStore(s => s.activeSection);
+  const selectedChord = useStore(s => s.selectedChord);
+  const scaleCapo = useStore(s => s.scaleCapo);
   const activeBeat = beats[currentBeat];
   const activeNotes = activeBeat?.notes || [];
 
-  // Capo bar: only drawn when the SOURCE declared a capo (a key shift moves
-  // a real capo but never conjures one). Everything at this fret plays "open".
-  const capoFret = !scaleViewActive ? effectiveCapo(score, transpose) : 0;
+  // Chord view focus: the fretboard should show ONLY the chord being
+  // inspected — no song dots, no song capo leaking from the Music tab.
+  const chordFocus = activeSection === 'chords' && Boolean(selectedChord);
+
+  // Capo bar: in scale mode the explorer's own optional capo; in song mode
+  // only when the SOURCE declared one (a key shift moves a real capo but
+  // never conjures one). Everything at this fret plays "open".
+  const capoFret = scaleViewActive
+    ? scaleCapo
+    : chordFocus ? 0 : effectiveCapo(score, transpose);
 
   const width = LEFT_MARGIN + (NUM_FRETS + 1) * FRET_WIDTH + 16;
   const height = TOP_MARGIN * 2 + 5 * STRING_SPACING + 14;
@@ -130,7 +141,7 @@ export default function Fretboard() {
   // Song mode: map of "string-fret" → note. Notes without a fret position
   // (out-of-range piano notes from MusicXML/MIDI) only appear on the piano.
   const activeMap = new Map();
-  if (!scaleViewActive) {
+  if (!scaleViewActive && !chordFocus) {
     for (const n of activeNotes) {
       if (n.string == null || n.fret == null) continue;
       activeMap.set(`${n.string}-${n.fret}`, n);
@@ -143,7 +154,7 @@ export default function Fretboard() {
     const positions = [];
     for (let stringIdx = 0; stringIdx < 6; stringIdx++) {
       const stringNumber = stringIdx + 1;
-      for (let fret = 0; fret <= NUM_FRETS; fret++) {
+      for (let fret = scaleCapo; fret <= NUM_FRETS; fret++) {
         const noteInfo = fretToNote(stringNumber, fret);
         if (!noteInfo) continue;
         const runInfo = getRunInfo(scaleOctaveRuns, noteInfo.note, noteInfo.octave);
@@ -160,7 +171,7 @@ export default function Fretboard() {
       }
     }
     return positions;
-  }, [scaleViewActive, activeScale, scaleOctaveRuns]);
+  }, [scaleViewActive, activeScale, scaleOctaveRuns, scaleCapo]);
 
   // Apply view mode + filters to determine which notes are highlighted vs dimmed
   const filteredPositions = useMemo(() => {
@@ -330,7 +341,7 @@ export default function Fretboard() {
 
       {/* Scale mode */}
       {scaleViewActive && filteredPositions.map((pos) => (
-        <ScaleDot key={`scale-${pos.stringIdx}-${pos.fret}`} pos={pos}
+        <ScaleDot key={`scale-${pos.stringIdx}-${pos.fret}`} pos={pos} capo={scaleCapo}
           onHover={hoverProps(pos.midi)} />
       ))}
 
@@ -357,7 +368,7 @@ export default function Fretboard() {
       )}
 
       {/* Song mode */}
-      {!scaleViewActive && Array.from(activeMap.values()).map((n, i) => {
+      {!scaleViewActive && !chordFocus && Array.from(activeMap.values()).map((n, i) => {
         const stringIdx = n.string - 1;
         const noteInfo = n.note ? n : fretToNote(n.string, n.fret);
         const noteName = noteInfo?.note || '';

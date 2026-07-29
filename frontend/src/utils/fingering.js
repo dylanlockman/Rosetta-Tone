@@ -75,6 +75,13 @@ function localPosition(beats, beatIdx, shift = 0) {
 }
 
 function applyPositional(beat, position, shift = 0) {
+  // Multi-note beats (double stops, partial chords) are fingered against the
+  // beat's own lowest fret, so each note gets a DISTINCT sensible finger —
+  // clamping every note independently against a distant hand position was
+  // producing duplicate pinkies.
+  const rels = beat.notes.map(n => relFret(n.fret, shift)).filter(r => r != null && r > 0);
+  const base = rels.length > 1 ? Math.min(...rels) : position;
+
   for (const note of beat.notes) {
     const rel = relFret(note.fret, shift);
     if (rel == null) {
@@ -85,7 +92,7 @@ function applyPositional(beat, position, shift = 0) {
       note.finger = 0; // open (or capo'd open)
       continue;
     }
-    let f = rel - position + 1;
+    let f = rel - base + 1;
     if (f < 1) f = 1;
     if (f > 4) f = 4;
     note.finger = f;

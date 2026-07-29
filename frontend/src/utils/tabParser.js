@@ -130,7 +130,17 @@ function scanMeasure(segments, stringMap) {
           numStr += seg[lookahead];
           lookahead++;
         }
-        events.push({ col, stringNumber: stringMap[lineIdx], fret: parseInt(numStr, 10) });
+        // A technique char directly before the number, itself preceded by a
+        // digit, marks how this note is articulated: 7h9, 9p7, 5/7 …
+        let technique = null;
+        const before = col > 0 ? seg[col - 1] : '';
+        const beforeThat = col > 1 ? seg[col - 2] : '';
+        if (beforeThat >= '0' && beforeThat <= '9') {
+          if (before === 'h' || before === 'H') technique = 'hammer';
+          else if (before === 'p' || before === 'P') technique = 'pull';
+          else if (before === '/' || before === '\\' || before === 's') technique = 'slide';
+        }
+        events.push({ col, stringNumber: stringMap[lineIdx], fret: parseInt(numStr, 10), technique });
         col = lookahead;
       } else {
         col++; // dashes, technique chars (h p b r s ~ / \), muted 'x'
@@ -152,6 +162,19 @@ function timeMeasure(measureEvents, width, measureStartBeat, beatsPerBar) {
     start: measureStartBeat + quantize((ev.col / Math.max(1, width)) * beatsPerBar),
   }));
 
+  // Sequential notes on ONE string (hammer-on/pull-off pairs like 7h9 in a
+  // dense bar) can quantize onto the same grid slot — a physical
+  // impossibility that also hides one number behind the other in the tab.
+  // Push the later note forward one grid step so the order survives.
+  const lastStartByString = new Map();
+  for (const ev of timed) { // per-string column order is preserved by scanMeasure
+    const prev = lastStartByString.get(ev.stringNumber);
+    if (prev != null && ev.start <= prev) {
+      ev.start = prev + BEAT_QUANT;
+    }
+    lastStartByString.set(ev.stringNumber, ev.start);
+  }
+
   // Group starts to compute ring-out durations: each onset rings until the
   // next onset anywhere (or the end of the bar).
   const starts = [...new Set(timed.map(e => e.start))].sort((a, b) => a - b);
@@ -172,6 +195,7 @@ function timeMeasure(measureEvents, width, measureStartBeat, beatsPerBar) {
       midi: noteToMidi(noteInfo.note, noteInfo.octave),
       string: ev.stringNumber,
       fret: ev.fret,
+      technique: ev.technique ?? null,
     });
   }).filter(Boolean);
 }
@@ -191,6 +215,7 @@ function timeUniform(measureEvents, startBeat) {
       midi: noteToMidi(noteInfo.note, noteInfo.octave),
       string: ev.stringNumber,
       fret: ev.fret,
+      technique: ev.technique ?? null,
     });
   }).filter(Boolean);
 }

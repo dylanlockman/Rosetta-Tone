@@ -127,6 +127,7 @@ export default function App() {
   const scaleViewMode = useStore(s => s.scaleViewMode);
   const selectedCagedPosition = useStore(s => s.selectedCagedPosition);
   const selectedOctaveRun = useStore(s => s.selectedOctaveRun);
+  const scaleCapo = useStore(s => s.scaleCapo);
 
   useEffect(() => {
     if (!isScalePlaying) return;
@@ -167,7 +168,7 @@ export default function App() {
       if (timerId) clearTimeout(timerId);
       useStore.getState().setScalePlayhead(null);
     };
-  }, [isScalePlaying, activeScale, scaleViewMode, selectedCagedPosition, selectedOctaveRun]);
+  }, [isScalePlaying, activeScale, scaleViewMode, selectedCagedPosition, selectedOctaveRun, scaleCapo]);
 
   // Keyboard shortcuts: Space = play/pause, ←/→ = step beat, Home = rewind
   useEffect(() => {

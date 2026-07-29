@@ -89,8 +89,11 @@ export default function TabView() {
                     border: open ? `1px solid ${color}` : 'none',
                     borderRadius: open ? 8 : 0,
                   }}
-                  title={`${note.note}${note.octave} (finger ${note.finger})`}
+                  title={`${note.note}${note.octave} (finger ${note.finger})${
+                    note.technique ? ` · ${note.technique}` : ''
+                  }`}
                 >
+                  {note.technique === 'hammer' ? 'ʰ' : note.technique === 'pull' ? 'ᵖ' : note.technique === 'slide' ? 'ˢ' : ''}
                   {note.fret - shift >= 0 ? note.fret - shift : note.fret}
                 </span>
               );

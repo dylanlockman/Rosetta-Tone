@@ -14,13 +14,13 @@ const POSITION_SPAN = 4; // frets a hand can cover (index to pinky)
  * Compute all fretboard positions where scale notes appear.
  * Returns: [{ string: 1-6, fret: 0-24, note, octave, midi }]
  */
-export function computeScaleFretPositions(scaleNotes) {
+export function computeScaleFretPositions(scaleNotes, minFret = 0) {
   if (!scaleNotes || scaleNotes.length === 0) return [];
   const scaleSet = new Set(scaleNotes);
   const positions = [];
   for (let stringIdx = 0; stringIdx < 6; stringIdx++) {
     const stringNumber = stringIdx + 1;
-    for (let fret = 0; fret <= NUM_FRETS; fret++) {
+    for (let fret = minFret; fret <= NUM_FRETS; fret++) {
       const info = fretToNote(stringNumber, fret);
       if (!info) continue;
       if (scaleSet.has(info.note)) {
@@ -47,8 +47,8 @@ export function computeScaleFretPositions(scaleNotes) {
  *
  * Returns up to 5-7 positions, each: { startFret, endFret, notes: [...] }
  */
-export function computeCagedPositions(scaleNotes) {
-  const allPositions = computeScaleFretPositions(scaleNotes);
+export function computeCagedPositions(scaleNotes, capo = 0) {
+  const allPositions = computeScaleFretPositions(scaleNotes, capo);
   if (allPositions.length === 0) return [];
 
   const root = scaleNotes[0];
@@ -72,7 +72,7 @@ export function computeCagedPositions(scaleNotes) {
   for (const rootFret of sortedRoots) {
     // Try centering the box so the root is reachable
     // The start fret should be at or just below the root
-    let startFret = Math.max(0, rootFret - 1);
+    let startFret = Math.max(capo, rootFret - 1);
 
     // Avoid duplicate/overlapping boxes
     if (usedStarts.has(startFret)) {
@@ -85,9 +85,10 @@ export function computeCagedPositions(scaleNotes) {
 
     usedStarts.add(startFret);
 
-    // Collect all scale notes in this fret window (include open strings = fret 0 for position starting at 0)
+    // Collect all scale notes in this fret window; a position starting at
+    // the capo includes the capo'd open strings
     const notes = allPositions.filter(p => {
-      if (startFret === 0) return p.fret >= 0 && p.fret <= endFret;
+      if (startFret === capo) return p.fret >= capo && p.fret <= endFret;
       return p.fret >= startFret && p.fret <= endFret;
     });
 
@@ -133,8 +134,8 @@ export function computeCagedPositions(scaleNotes) {
  *
  * Returns: [{ startDegree, notes: [{ string, fret, note, octave }] }]
  */
-export function computeDiagonalPatterns(scaleNotes) {
-  const allPositions = computeScaleFretPositions(scaleNotes);
+export function computeDiagonalPatterns(scaleNotes, capo = 0) {
+  const allPositions = computeScaleFretPositions(scaleNotes, capo);
   if (allPositions.length === 0) return [];
 
   // Group positions by string

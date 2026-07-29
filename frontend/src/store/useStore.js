@@ -58,7 +58,8 @@ export const useStore = create((set, get) => ({
   activeScale: null,       // { name, root, notes }
   scaleViewActive: false,
   scaleOctaveRuns: [],     // computed octave-run data for fretboard/piano
-  scaleViewMode: 'full',   // 'full' | 'vertical' | 'diagonal'
+  scaleViewMode: 'full',   // 'full' | 'vertical' | 'diagonal' | 'pitchmap'
+  scaleCapo: 0,            // optional capo for the scale explorer (0 = none)
   cagedPositions: [],      // computed CAGED box positions
   diagonalPatterns: [],    // computed 3-notes-per-string diagonal patterns
   selectedCagedPosition: null, // null = all, 0-based index
@@ -98,6 +99,18 @@ export const useStore = create((set, get) => ({
     }
   },
   setScaleViewMode: (mode) => set({ scaleViewMode: mode }),
+  setScaleCapo: (n) => {
+    const scaleCapo = Math.max(0, Math.min(11, n));
+    const { activeScale } = get();
+    const update = { scaleCapo };
+    if (activeScale?.notes) {
+      // Reframe the patterns above the capo
+      update.cagedPositions = computeCagedPositions(activeScale.notes, scaleCapo);
+      update.diagonalPatterns = computeDiagonalPatterns(activeScale.notes, scaleCapo);
+      update.selectedCagedPosition = null;
+    }
+    set(update);
+  },
   setSelectedCagedPosition: (pos) => set({ selectedCagedPosition: pos }),
   setSelectedOctaveRun: (run) => set({ selectedOctaveRun: run }),
   setSelectedChord: (chord) => set({ selectedChord: chord, selectedScaleChord: null }),
@@ -154,9 +167,10 @@ export const useStore = create((set, get) => ({
   loadScale: async (name, root) => {
     try {
       const { data } = await api.get(`/scales/${encodeURIComponent(name)}/${encodeURIComponent(root)}`);
+      const { scaleCapo } = get();
       const runs = computeScaleOctaveRuns(data.notes, 0, 8);
-      const caged = computeCagedPositions(data.notes);
-      const diagonal = computeDiagonalPatterns(data.notes);
+      const caged = computeCagedPositions(data.notes, scaleCapo);
+      const diagonal = computeDiagonalPatterns(data.notes, scaleCapo);
       const { chordLibrary } = get();
       const inKey = getChordsInKey(data.notes, chordLibrary);
       // Expand each chord to multiple voicings

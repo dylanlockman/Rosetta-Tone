@@ -32,8 +32,11 @@ import { noteToMidi, midiToNote } from './musicTheory.js';
 
 export const SCORE_VERSION = 1;
 
-// Quantization grid for grouping simultaneous events (a sixteenth).
-const START_EPSILON = 0.26;
+// Events are "simultaneous" only when their starts effectively coincide.
+// This must be strictly SMALLER than the sixteenth quantization grid (0.25):
+// a wider window merges adjacent grid slots, manufacturing impossible
+// same-string "chords" out of sequential notes like hammer-on pairs.
+const START_EPSILON = 0.125;
 
 export function createScore(meta = {}, events = []) {
   return {
@@ -56,7 +59,7 @@ export function createScore(meta = {}, events = []) {
 }
 
 // Build a normalized event; fills midi from note/octave or vice versa.
-export function createEvent({ start, duration, midi, note, octave, string = null, fret = null, lyric = null, chordSymbol = null }) {
+export function createEvent({ start, duration, midi, note, octave, string = null, fret = null, lyric = null, chordSymbol = null, technique = null }) {
   if (midi == null && note != null && octave != null) {
     midi = noteToMidi(note, octave);
   }
@@ -65,7 +68,7 @@ export function createEvent({ start, duration, midi, note, octave, string = null
     note = info.note;
     octave = info.octave;
   }
-  return { start, duration, midi, note, octave, string, fret, lyric, chordSymbol };
+  return { start, duration, midi, note, octave, string, fret, lyric, chordSymbol, technique };
 }
 
 // Group score events into the beat list the views subscribe to.
@@ -91,6 +94,7 @@ export function scoreToBeats(score) {
       duration: ev.duration,
       lyric: ev.lyric,
       chordSymbol: ev.chordSymbol,
+      technique: ev.technique ?? null,
       beatIndex: current.beatIndex,
     });
     current.duration = Math.max(current.duration, ev.duration);

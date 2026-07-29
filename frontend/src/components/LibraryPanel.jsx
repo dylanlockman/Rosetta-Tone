@@ -176,6 +176,8 @@ function ScaleControls() {
   const selectedOctaveRun = useStore(s => s.selectedOctaveRun);
   const setSelectedOctaveRun = useStore(s => s.setSelectedOctaveRun);
   const scaleOctaveRuns = useStore(s => s.scaleOctaveRuns);
+  const scaleCapo = useStore(s => s.scaleCapo);
+  const setScaleCapo = useStore(s => s.setScaleCapo);
 
   if (!scaleViewActive) return null;
 
@@ -195,6 +197,26 @@ function ScaleControls() {
       <div className="flex items-center justify-between">
         <div className="panel-label">Playback</div>
         <ScalePlayControls />
+      </div>
+
+      {/* Optional capo — reframes every pattern above the chosen fret */}
+      <div className="flex items-center justify-between">
+        <div className="panel-label">Capo</div>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => setScaleCapo(scaleCapo - 1)}
+            className="w-5 h-5 rounded text-chrome-400 hover:text-chrome-100 hover:bg-ink-800 transition-colors text-sm leading-none"
+          >−</button>
+          <span className={`font-mono text-[11px] min-w-[2.6rem] text-center ${
+            scaleCapo > 0 ? 'text-gold-400 font-semibold' : 'text-chrome-500'
+          }`}>
+            {scaleCapo > 0 ? `fret ${scaleCapo}` : 'none'}
+          </span>
+          <button
+            onClick={() => setScaleCapo(scaleCapo + 1)}
+            className="w-5 h-5 rounded text-chrome-400 hover:text-chrome-100 hover:bg-ink-800 transition-colors text-sm leading-none"
+          >+</button>
+        </div>
       </div>
 
       {/* View mode toggle */}
