@@ -33,13 +33,16 @@ export default function ChordStaff({ chord }) {
     context.setFillStyle('#B9BCC5');
     context.setStrokeStyle('#B9BCC5');
 
+    // Guitar notation convention: written an octave above sounding pitch
+    // (treble 8vb), which centers chord voicings on the staff instead of
+    // burying them in ledger lines below it.
     const stave = new Stave(10, 20, staveWidth);
-    stave.addClef('treble');
+    stave.addClef('treble', 'default', '8vb');
     stave.setContext(context);
     stave.setStyle({ strokeStyle: '#B9BCC5', fillStyle: '#B9BCC5' });
     stave.draw();
 
-    const keys = pitches.map(p => `${p.note.toLowerCase()}/${p.octave}`);
+    const keys = pitches.map(p => `${p.note.toLowerCase()}/${p.octave + 1}`);
     const staveNote = new StaveNote({ keys, duration: 'w', clef: 'treble' });
 
     // Add accidentals

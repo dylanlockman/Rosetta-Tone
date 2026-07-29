@@ -12,7 +12,7 @@ const DEFAULTS = {
 // neutral = use a single color for all dots (no finger-color meaning)
 // onSelect = callback when chord box is clicked
 // selected = whether this chord box is currently selected
-export default function ChordBox({ chord, size = 'md', neutral = false, onSelect, selected = false }) {
+export default function ChordBox({ chord, size = 'md', neutral = false, onSelect, selected = false, subtitle = null }) {
   if (!chord || !chord.fingering) return null;
 
   const scale = size === 'sm' ? 1.0 : size === 'lg' ? 1.5 : 1.2;
@@ -40,7 +40,10 @@ export default function ChordBox({ chord, size = 'md', neutral = false, onSelect
       } ${selected ? 'bg-ink-800/80 ring-1 ring-gold-400' : ''}`}
       onClick={onSelect ? () => onSelect(chord) : undefined}
     >
-      <div className="text-xs font-semibold text-chrome-100 mb-1">{chord.name}</div>
+      <div className="text-xs font-semibold text-chrome-100">{chord.name}</div>
+      {subtitle && (
+        <div className="text-[9px] text-chrome-500 mb-0.5">{subtitle}</div>
+      )}
       <svg width={width} height={height}>
         {/* Nut (thick bar for open position) */}
         {isOpen && (

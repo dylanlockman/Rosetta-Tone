@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore.js';
 import AddSongModal from './AddSongModal.jsx';
 import { CHROMATIC_SCALE } from '../utils/musicTheory.js';
+import { usePanelSize, DragHandle } from './useResizable.jsx';
 import { getOctaveColor } from '../utils/scaleColors.js';
 
 const SECTIONS = [
@@ -123,8 +124,8 @@ function MusicSection() {
 function ScalePlayControls() {
   const isScalePlaying = useStore(s => s.isScalePlaying);
   const setIsScalePlaying = useStore(s => s.setIsScalePlaying);
-  const scaleLoop = useStore(s => s.scaleLoop);
-  const toggleScaleLoop = useStore(s => s.toggleScaleLoop);
+  const loop = useStore(s => s.loop);
+  const toggleLoop = useStore(s => s.toggleLoop);
 
   return (
     <div className="flex items-center gap-1.5">
@@ -150,9 +151,9 @@ function ScalePlayControls() {
         {isScalePlaying ? 'Stop' : 'Play'}
       </button>
       <button
-        onClick={toggleScaleLoop}
+        onClick={toggleLoop}
         className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
-          scaleLoop
+          loop
             ? 'bg-ink-700 text-gold-400'
             : 'bg-ink-850 text-chrome-500 hover:text-chrome-300'
         }`}
@@ -179,6 +180,11 @@ function ScaleControls() {
   if (!scaleViewActive) return null;
 
   const maxRun = scaleOctaveRuns.reduce((max, r) => Math.max(max, r.runIndex), 0);
+  // First octave each run starts in — so buttons read as real octaves (C3, C4…)
+  const runStartOctave = {};
+  for (const r of scaleOctaveRuns) {
+    if (!(r.runIndex in runStartOctave)) runStartOctave[r.runIndex] = r.octave;
+  }
   const positionCount = scaleViewMode === 'diagonal'
     ? diagonalPatterns.length
     : cagedPositions.length;
@@ -196,7 +202,15 @@ function ScaleControls() {
         <div className="panel-label mb-1">View</div>
         <div className="flex gap-0.5 bg-ink-850 rounded-lg p-0.5 border border-ink-700/50">
           {[{ v: 'full', l: 'Full' }, { v: 'vertical', l: 'Vertical' }, { v: 'diagonal', l: 'Diagonal' }].map(({ v, l }) => (
-            <button key={v} onClick={() => { setScaleViewMode(v); setSelectedCagedPosition(null); }}
+            <button key={v} onClick={() => {
+                setScaleViewMode(v);
+                // Filters are sticky across view switches; only clamp if the
+                // new mode has fewer positions than the selected index.
+                const count = v === 'diagonal' ? diagonalPatterns.length : cagedPositions.length;
+                if (selectedCagedPosition !== null && selectedCagedPosition >= count) {
+                  setSelectedCagedPosition(null);
+                }
+              }}
               className={`flex-1 px-1 py-1 text-[10px] rounded-md font-medium transition-colors ${
                 scaleViewMode === v ? 'bg-ink-700 text-chrome-100' : 'text-chrome-400 hover:text-chrome-100'
               }`}>{l}</button>
@@ -240,16 +254,19 @@ function ScaleControls() {
             >All</button>
             {Array.from({ length: maxRun + 1 }).map((_, i) => {
               const color = getOctaveColor(i);
+              const startOct = runStartOctave[i];
+              const root = scaleOctaveRuns[0]?.pitchClass ?? '';
               return (
                 <button key={i}
                   onClick={() => setSelectedOctaveRun(selectedOctaveRun === i ? null : i)}
                   className="px-2 py-0.5 text-[10px] rounded-md font-medium transition-colors"
+                  title={startOct != null ? `${root}${startOct} – ${root}${startOct + 1}` : ''}
                   style={{
                     backgroundColor: selectedOctaveRun === i ? color : '#161920',
                     color: selectedOctaveRun === i ? '#fff' : '#8A8F9E',
                     border: `1.5px solid ${selectedOctaveRun === i ? color : `${color}66`}`,
                   }}
-                >{i + 1}</button>
+                >{startOct != null ? `${root}${startOct}` : i + 1}</button>
               );
             })}
           </div>
@@ -358,9 +375,14 @@ function ChordsSection() {
 export default function LibraryPanel() {
   const activeSection = useStore(s => s.activeSection);
   const setActiveSection = useStore(s => s.setActiveSection);
+  const [width, setWidth] = usePanelSize('library-w', 256, 200, 420);
 
   return (
-    <aside className="w-64 border-r border-ink-700/60 bg-ink-900 flex flex-col flex-shrink-0">
+    <aside className="relative border-r border-ink-700/60 bg-ink-900 flex flex-col flex-shrink-0"
+           style={{ width }}>
+      <div className="absolute right-0 top-0 bottom-0 z-20">
+        <DragHandle direction="col" getStart={() => width} onResize={setWidth} />
+      </div>
       {/* Tab bar */}
       <div className="flex border-b border-ink-700/60">
         {SECTIONS.map(({ key, label }) => (

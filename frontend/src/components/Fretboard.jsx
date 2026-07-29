@@ -3,11 +3,13 @@ import { useStore } from '../store/useStore.js';
 import { STANDARD_TUNING, fretToNote, noteToMidi } from '../utils/musicTheory.js';
 import { getFingerColor, isOpen } from '../utils/noteColors.js';
 import { getRunInfo, getOctaveColor } from '../utils/scaleColors.js';
+import { candidatesForMidi } from '../utils/fretInference.js';
 
 const NUM_FRETS = 24;
 const FRET_WIDTH = 36;
 const STRING_SPACING = 24;
-const LEFT_MARGIN = 20;
+const LEFT_MARGIN = 52;   // nut position — leaves room for labels + full open-string dots
+const OPEN_X = 30;        // center of open-string dots (halo fits: 30 ± 15)
 const TOP_MARGIN = 22;
 const DOT_RADIUS = 10;
 
@@ -18,9 +20,13 @@ const NUMBERED_FRETS = [3, 5, 7, 9, 12, 15, 17, 19, 21, 24];
 // Wound strings (low E, A, D) get a brass tint; plain strings are steel.
 const STRING_COLORS = ['#C9CDD4', '#C9CDD4', '#C9CDD4', '#C79F63', '#BE9354', '#B58745'];
 
-function SplitDot({ cx, cy, r, color1, color2, label, id }) {
+function noteX(fret) {
+  return fret === 0 ? OPEN_X : LEFT_MARGIN + fret * FRET_WIDTH - FRET_WIDTH / 2;
+}
+
+function SplitDot({ cx, cy, r, color1, color2, label, id, onHover }) {
   return (
-    <g className="note-transition">
+    <g className="note-transition" {...onHover}>
       <defs>
         <clipPath id={`split-tl-${id}`}>
           <polygon points={`${cx - r},${cy - r} ${cx + r},${cy - r} ${cx - r},${cy + r}`} />
@@ -40,15 +46,13 @@ function SplitDot({ cx, cy, r, color1, color2, label, id }) {
   );
 }
 
-function ScaleDot({ pos }) {
-  const cx = pos.fret === 0
-    ? LEFT_MARGIN - 26
-    : LEFT_MARGIN + pos.fret * FRET_WIDTH - FRET_WIDTH / 2;
+function ScaleDot({ pos, onHover }) {
+  const cx = noteX(pos.fret);
   const cy = TOP_MARGIN + pos.stringIdx * STRING_SPACING;
 
   if (pos.dimmed) {
     return (
-      <g className="note-transition">
+      <g className="note-transition" {...onHover}>
         <circle cx={cx} cy={cy} r={DOT_RADIUS - 2}
           fill={pos.fret === 0 ? 'transparent' : '#262B38'} stroke="#333A4A"
           strokeWidth={1} opacity={0.45} />
@@ -67,15 +71,16 @@ function ScaleDot({ pos }) {
         color2={getOctaveColor(pos.runIndex)}
         label={pos.pitchClass}
         id={`fb-${pos.stringIdx}-${pos.fret}`}
+        onHover={onHover}
       />
     );
   }
 
   const color = getOctaveColor(pos.runIndex);
   return (
-    <g className="note-transition">
+    <g className="note-transition" {...onHover}>
       <circle cx={cx} cy={cy} r={DOT_RADIUS}
-        fill={pos.fret === 0 ? 'transparent' : color}
+        fill={pos.fret === 0 ? 'rgba(11,12,16,0.75)' : color}
         stroke={pos.fret === 0 ? color : '#0B0C10'}
         strokeWidth={pos.fret === 0 ? 2.5 : 2} />
       <text x={cx} y={cy + 3.5}
@@ -99,14 +104,22 @@ export default function Fretboard() {
   const selectedCagedPosition = useStore(s => s.selectedCagedPosition);
   const selectedOctaveRun = useStore(s => s.selectedOctaveRun);
   const selectedScaleChord = useStore(s => s.selectedScaleChord);
-  const scalePlayheadNote = useStore(s => s.scalePlayheadNote);
+  const scalePlayhead = useStore(s => s.scalePlayhead);
+  const hoverMidi = useStore(s => s.hoverMidi);
+  const setHoverMidi = useStore(s => s.setHoverMidi);
   const activeBeat = beats[currentBeat];
   const activeNotes = activeBeat?.notes || [];
 
-  const width = LEFT_MARGIN + (NUM_FRETS + 1) * FRET_WIDTH + 20;
+  const width = LEFT_MARGIN + (NUM_FRETS + 1) * FRET_WIDTH + 16;
   const height = TOP_MARGIN * 2 + 5 * STRING_SPACING + 14;
   const neckTop = TOP_MARGIN - 10;
   const neckHeight = 5 * STRING_SPACING + 20;
+
+  const hoverProps = (midi) => ({
+    onMouseEnter: () => setHoverMidi(midi),
+    onMouseLeave: () => setHoverMidi(null),
+    style: { cursor: 'crosshair' },
+  });
 
   // Song mode: map of "string-fret" → note. Notes without a fret position
   // (out-of-range piano notes from MusicXML/MIDI) only appear on the piano.
@@ -176,8 +189,11 @@ export default function Fretboard() {
   }, [allScalePositions, scaleViewMode, cagedPositions, diagonalPatterns,
       selectedCagedPosition, selectedOctaveRun]);
 
+  const playheadNote = scaleViewActive ? scalePlayhead?.note : null;
+
   return (
-    <svg width={width} height={height} className="block">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet"
+         className="block w-full h-full">
       <defs>
         {/* Ebony neck with a subtle sheen */}
         <linearGradient id="neckGrad" x1="0" y1="0" x2="0" y2="1">
@@ -205,7 +221,6 @@ export default function Fretboard() {
         width={(NUM_FRETS + 1) * FRET_WIDTH} height={neckHeight}
         fill="url(#neckGrad)" rx="5"
       />
-      {/* Edge shadow for depth */}
       <rect
         x={LEFT_MARGIN} y={neckTop}
         width={(NUM_FRETS + 1) * FRET_WIDTH} height={3}
@@ -282,49 +297,55 @@ export default function Fretboard() {
             x2={LEFT_MARGIN + (NUM_FRETS + 1) * FRET_WIDTH}
             y2={TOP_MARGIN + idx * STRING_SPACING}
             stroke={STRING_COLORS[idx]} strokeWidth={0.8 + idx * 0.35} />
-          <text x={LEFT_MARGIN - 12} y={TOP_MARGIN + idx * STRING_SPACING + 3.5}
-            fill="#8A8F9E" fontSize="11" textAnchor="end" fontWeight="500"
+          <text x={12} y={TOP_MARGIN + idx * STRING_SPACING + 3.5}
+            fill="#8A8F9E" fontSize="11" textAnchor="middle" fontWeight="500"
             fontFamily='"JetBrains Mono", monospace'>{open.note}</text>
         </g>
       ))}
 
       {/* Scale mode */}
       {scaleViewActive && filteredPositions.map((pos) => (
-        <ScaleDot key={`scale-${pos.stringIdx}-${pos.fret}`} pos={pos} />
+        <ScaleDot key={`scale-${pos.stringIdx}-${pos.fret}`} pos={pos}
+          onHover={hoverProps(pos.midi)} />
+      ))}
+
+      {/* Cross-highlight: every position matching the hovered pitch */}
+      {hoverMidi != null && candidatesForMidi(hoverMidi).map(({ string, fret }) => (
+        <circle key={`hover-${string}-${fret}`}
+          cx={noteX(fret)} cy={TOP_MARGIN + (string - 1) * STRING_SPACING}
+          r={DOT_RADIUS + 3.5} fill="none" stroke="#FFD98A" strokeWidth={1.5}
+          strokeDasharray="3 2" style={{ pointerEvents: 'none' }} />
       ))}
 
       {/* Scale playback: traveling highlight */}
-      {scaleViewActive && scalePlayheadNote && (() => {
-        const { string, fret } = scalePlayheadNote;
-        const cx = fret === 0
-          ? LEFT_MARGIN - 26
-          : LEFT_MARGIN + fret * FRET_WIDTH - FRET_WIDTH / 2;
-        const cy = TOP_MARGIN + (string - 1) * STRING_SPACING;
-        return (
-          <g filter="url(#dotGlow)" style={{ pointerEvents: 'none' }}>
-            <circle cx={cx} cy={cy} r={DOT_RADIUS + 4}
-              fill="none" stroke="#FFD98A" strokeWidth={2.5} />
-            <circle cx={cx} cy={cy} r={DOT_RADIUS + 1.5}
-              fill="rgba(255,217,138,0.25)" />
-          </g>
-        );
-      })()}
+      {scaleViewActive && playheadNote && (
+        <g filter="url(#dotGlow)" style={{ pointerEvents: 'none' }}>
+          <circle cx={noteX(playheadNote.fret)}
+            cy={TOP_MARGIN + (playheadNote.string - 1) * STRING_SPACING}
+            r={DOT_RADIUS + 4}
+            fill="none" stroke="#FFD98A" strokeWidth={2.5} />
+          <circle cx={noteX(playheadNote.fret)}
+            cy={TOP_MARGIN + (playheadNote.string - 1) * STRING_SPACING}
+            r={DOT_RADIUS + 1.5}
+            fill="rgba(255,217,138,0.25)" />
+        </g>
+      )}
 
       {/* Song mode */}
       {!scaleViewActive && Array.from(activeMap.values()).map((n, i) => {
         const stringIdx = n.string - 1;
         const noteInfo = n.note ? n : fretToNote(n.string, n.fret);
         const noteName = noteInfo?.note || '';
-        const cx = n.fret === 0
-          ? LEFT_MARGIN - 26
-          : LEFT_MARGIN + n.fret * FRET_WIDTH - FRET_WIDTH / 2;
+        const midi = n.midi ?? noteToMidi(noteInfo?.note, noteInfo?.octave);
+        const cx = noteX(n.fret);
         const cy = TOP_MARGIN + stringIdx * STRING_SPACING;
         const open = isOpen(n.finger);
         const color = getFingerColor(n.finger);
         return (
           <g key={`note-${n.string}-${n.fret}-${i}`}
              filter={open ? undefined : 'url(#dotGlow)'}
-             style={{ animation: 'pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both' }}>
+             style={{ animation: 'pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both' }}
+             {...hoverProps(midi)}>
             <circle cx={cx} cy={cy} r={DOT_RADIUS}
               fill={open ? 'rgba(11,12,16,0.75)' : color}
               stroke={open ? color : '#0B0C10'}
@@ -342,9 +363,7 @@ export default function Fretboard() {
       {selectedScaleChord?.fingering && selectedScaleChord.fingering.map((f, i) => {
         if (f.fret < 0) return null;
         const stringIdx = f.string - 1;
-        const cx = f.fret === 0
-          ? LEFT_MARGIN - 26
-          : LEFT_MARGIN + f.fret * FRET_WIDTH - FRET_WIDTH / 2;
+        const cx = noteX(f.fret);
         const cy = TOP_MARGIN + stringIdx * STRING_SPACING;
         return (
           <g key={`chord-hl-${i}`}>

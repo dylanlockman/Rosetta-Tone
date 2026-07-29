@@ -20,7 +20,7 @@ const MAX_ASSIGNMENTS_PER_GROUP = 24;
 // Open-string MIDI numbers indexed by string number (1 = high E .. 6 = low E)
 const OPEN_MIDI = STANDARD_TUNING.map(t => noteToMidi(t.note, t.octave));
 
-function candidatesForMidi(midi) {
+export function candidatesForMidi(midi) {
   const out = [];
   for (let s = 1; s <= 6; s++) {
     const fret = midi - OPEN_MIDI[s - 1];

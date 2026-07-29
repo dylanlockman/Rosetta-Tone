@@ -3,12 +3,36 @@ import axios from 'axios';
 import { tabToScore } from '../utils/tabParser.js';
 import { scoreToBeats, deserializeScore, serializeScore } from '../utils/score.js';
 import { inferFingerings } from '../utils/fingering.js';
+import { transposeBeats } from '../utils/transpose.js';
 import { computeScaleOctaveRuns } from '../utils/scaleColors.js';
 import { computeCagedPositions, computeDiagonalPatterns } from '../utils/scalePositions.js';
 import { getChordsInKey } from '../utils/musicTheory.js';
 import { generateVoicings } from '../utils/chordVoicings.js';
 
 const api = axios.create({ baseURL: '/api' });
+
+// Derive display beats from the canonical score: group, transpose, finger.
+function deriveBeats(score, transpose, chordLibrary) {
+  let beats = scoreToBeats(score);
+  if (transpose) beats = transposeBeats(beats, transpose);
+  inferFingerings(beats, chordLibrary);
+  return beats;
+}
+
+// Map score.meta.sections ({name, startBeat}) onto beat index ranges.
+function deriveSections(score, beats) {
+  const raw = score?.meta?.sections;
+  if (!raw?.length || beats.length === 0) return [];
+  const sections = raw.map(s => {
+    let startIndex = beats.findIndex(b => b.start >= s.startBeat - 1e-6);
+    if (startIndex === -1) startIndex = beats.length - 1;
+    return { name: s.name, startBeat: s.startBeat, startIndex, endIndex: beats.length - 1 };
+  });
+  for (let i = 0; i < sections.length - 1; i++) {
+    sections[i].endIndex = Math.max(sections[i].startIndex, sections[i + 1].startIndex - 1);
+  }
+  return sections;
+}
 
 export const useStore = create((set, get) => ({
   songs: [],
@@ -33,17 +57,34 @@ export const useStore = create((set, get) => ({
   loading: false,
   error: null,
   bpm: 90,
-  playbackRate: 1, // practice speed multiplier: 0.5 | 0.75 | 1
+  transpose: 0,        // key shift in semitones (capo-style on the guitar)
+  loop: false,         // loops the song / active section / scale pattern
   isPlaying: false,
+  sections: [],        // [{ name, startBeat, startIndex, endIndex }]
+  songSection: null,   // index into sections, or null = whole song
+  hoverMidi: null,     // cross-highlight between fretboard and piano
   // Scale playback
   isScalePlaying: false,
-  scaleLoop: false,
-  scalePlayheadNote: null, // { string, fret, note, octave, midi } during playback
+  scalePlayhead: null, // { note: {string,fret,note,octave,midi}, idx, total }
   instrument: 'piano', // 'piano' | 'guitar'
   audioEnabled: true,
 
   setBpm: (bpm) => set({ bpm: Math.max(20, Math.min(300, Number(bpm) || 90)) }),
-  setPlaybackRate: (playbackRate) => set({ playbackRate }),
+  setTranspose: (t) => {
+    const clamped = Math.max(-12, Math.min(12, t));
+    const { score, chordLibrary } = get();
+    if (!score) { set({ transpose: clamped }); return; }
+    set({ transpose: clamped, beats: deriveBeats(score, clamped, chordLibrary) });
+  },
+  setHoverMidi: (hoverMidi) => set({ hoverMidi }),
+  setSongSection: (idx) => {
+    const { sections } = get();
+    if (idx == null || !sections[idx]) {
+      set({ songSection: null });
+    } else {
+      set({ songSection: idx, currentBeat: sections[idx].startIndex });
+    }
+  },
   setScaleViewMode: (mode) => set({ scaleViewMode: mode }),
   setSelectedCagedPosition: (pos) => set({ selectedCagedPosition: pos }),
   setSelectedOctaveRun: (run) => set({ selectedOctaveRun: run }),
@@ -54,7 +95,7 @@ export const useStore = create((set, get) => ({
     if (section !== 'scales') {
       update.scaleViewActive = false;
       update.isScalePlaying = false;
-      update.scalePlayheadNote = null;
+      update.scalePlayhead = null;
     }
     if (section === 'music') {
       update.selectedChord = null;
@@ -65,10 +106,10 @@ export const useStore = create((set, get) => ({
   toggleAudio: () => set({ audioEnabled: !get().audioEnabled }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setIsScalePlaying: (isScalePlaying) => set(
-    isScalePlaying ? { isScalePlaying } : { isScalePlaying, scalePlayheadNote: null }
+    isScalePlaying ? { isScalePlaying } : { isScalePlaying, scalePlayhead: null }
   ),
-  toggleScaleLoop: () => set({ scaleLoop: !get().scaleLoop }),
-  setScalePlayheadNote: (scalePlayheadNote) => set({ scalePlayheadNote }),
+  toggleLoop: () => set({ loop: !get().loop }),
+  setScalePlayhead: (scalePlayhead) => set({ scalePlayhead }),
 
   fetchSongs: async () => {
     set({ loading: true, error: null });
@@ -118,7 +159,7 @@ export const useStore = create((set, get) => ({
         selectedOctaveRun: null,
         scaleViewActive: true,
         isScalePlaying: false,
-        scalePlayheadNote: null,
+        scalePlayhead: null,
       });
     } catch (e) {
       set({ error: e.message });
@@ -135,13 +176,15 @@ export const useStore = create((set, get) => ({
       if (!score) {
         score = tabToScore(data.raw_content, { title: data.title, artist: data.artist });
       }
-      const beats = scoreToBeats(score);
       const { chordLibrary } = get();
-      inferFingerings(beats, chordLibrary);
+      const beats = deriveBeats(score, 0, chordLibrary);
       set({
         activeSong: data,
         score,
         beats,
+        sections: deriveSections(score, beats),
+        songSection: null,
+        transpose: 0,
         currentBeat: 0,
         loading: false,
         scaleViewActive: false,
@@ -184,7 +227,7 @@ export const useStore = create((set, get) => ({
       await api.delete(`/songs/${id}`);
       const { activeSong } = get();
       if (activeSong?.id === id) {
-        set({ activeSong: null, score: null, beats: [], currentBeat: 0 });
+        set({ activeSong: null, score: null, beats: [], sections: [], songSection: null, currentBeat: 0 });
       }
       await get().fetchSongs();
     } catch (e) {

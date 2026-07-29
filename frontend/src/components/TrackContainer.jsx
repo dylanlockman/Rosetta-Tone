@@ -8,6 +8,7 @@ import Playhead from './Playhead.jsx';
 import ScaleStaff from './ScaleStaff.jsx';
 import ChordStaff from './ChordStaff.jsx';
 import ChordBox from './ChordBox.jsx';
+import { usePanelSize, DragHandle } from './useResizable.jsx';
 import { generateVoicings } from '../utils/chordVoicings.js';
 import { fretToNote } from '../utils/musicTheory.js';
 import { getRunInfo } from '../utils/scaleColors.js';
@@ -22,11 +23,12 @@ const FINGER_LEGEND = [
   { finger: 'T', label: 'Thumb' },
 ];
 
+// Label sits top-right; children (e.g. finger legend) sit top-left.
 function PanelHeader({ label, children }) {
   return (
-    <div className="flex items-center justify-between px-3 mb-1">
+    <div className="flex items-center justify-between px-3 mb-1 min-h-[16px]">
+      <div>{children}</div>
       <span className="panel-label">{label}</span>
-      {children}
     </div>
   );
 }
@@ -47,6 +49,42 @@ function FingerLegend() {
   );
 }
 
+// Song-section pills: [Intro] [Verse] … parsed from the tab source.
+function SectionPills() {
+  const sections = useStore(s => s.sections);
+  const songSection = useStore(s => s.songSection);
+  const setSongSection = useStore(s => s.setSongSection);
+  if (sections.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap px-3 py-2 border-b border-ink-700/40">
+      <button
+        onClick={() => setSongSection(null)}
+        className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+          songSection === null
+            ? 'bg-gold-400 text-ink-950'
+            : 'bg-ink-850 text-chrome-400 hover:text-chrome-100'
+        }`}
+      >
+        All
+      </button>
+      {sections.map((s, i) => (
+        <button
+          key={i}
+          onClick={() => setSongSection(songSection === i ? null : i)}
+          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+            songSection === i
+              ? 'bg-gold-400 text-ink-950'
+              : 'bg-ink-850 text-chrome-400 hover:text-chrome-100'
+          }`}
+        >
+          {s.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function SongView({ beats, scrollRef, dragging, setDragging, handleScrub }) {
   const onMouseDown = (e) => { setDragging(true); handleScrub(e.clientX); };
   const onMouseMove = (e) => { if (dragging) handleScrub(e.clientX); };
@@ -55,28 +93,46 @@ function SongView({ beats, scrollRef, dragging, setDragging, handleScrub }) {
   const totalWidth = LEFT_GUTTER + beats.length * BEAT_WIDTH + RIGHT_PADDING;
 
   return (
-    <div
-      ref={scrollRef}
-      className="flex-1 overflow-x-auto overflow-y-auto select-none min-h-0 min-w-0 anim-fade-up"
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseLeave}
-      style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
-    >
-      <div className="relative" style={{ width: totalWidth, minWidth: totalWidth }}>
-        <div className="border-b border-ink-700/40 py-2">
-          <div className="panel-label px-3 mb-1">Sheet Music</div>
-          <NotationView />
+    <div className="flex-1 flex flex-col min-h-0 min-w-0 anim-fade-up">
+      <SectionPills />
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={scrollRef}
+          className="absolute inset-0 overflow-x-auto overflow-y-auto select-none"
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseLeave}
+          style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
+        >
+          <div className="relative" style={{ width: totalWidth, minWidth: totalWidth }}>
+            <div className="border-b border-ink-700/40 py-2">
+              <NotationView />
+            </div>
+            <div className="border-b border-ink-700/40 py-2">
+              <TabView />
+            </div>
+            <Playhead />
+          </div>
         </div>
-        <div className="border-b border-ink-700/40 py-2">
-          <div className="panel-label px-3 mb-1">Tab</div>
-          <TabView />
-        </div>
-        <Playhead />
+        {/* Band labels pinned top-right of the visible area */}
+        <div className="absolute top-2 right-3 panel-label pointer-events-none">Sheet Music</div>
+        <div className="absolute right-3 panel-label pointer-events-none" style={{ top: 172 }}>Tab</div>
       </div>
     </div>
   );
+}
+
+// Position label for a voicing: "Open" (uses open strings / nut position)
+// or the lowest fretted fret up the neck.
+function voicingPosition(fingering) {
+  const all = fingering || [];
+  const fretted = all.filter(f => f.fret > 0);
+  if (fretted.length === 0) return 'Open';
+  const min = Math.min(...fretted.map(f => f.fret));
+  const hasOpen = all.some(f => f.fret === 0);
+  if (min <= 1 || (hasOpen && min <= 3)) return 'Open';
+  return `${min}fr`;
 }
 
 function ScaleView({ activeScale, chordsInKey }) {
@@ -124,35 +180,59 @@ function ScaleView({ activeScale, chordsInKey }) {
     return result;
   }, [chordsInKey, selectedCagedPosition, cagedPositions, selectedOctaveRun, scaleOctaveRuns]);
 
+  // Group alternate voicings under their chord name. Same pitch classes,
+  // different physical spellings — that's the whole point of showing them.
+  const chordGroups = useMemo(() => {
+    const groups = new Map();
+    for (const chord of filteredChords) {
+      if (!groups.has(chord.name)) groups.set(chord.name, []);
+      groups.get(chord.name).push(chord);
+    }
+    return [...groups.entries()];
+  }, [filteredChords]);
+
   return (
     <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden anim-fade-up">
       {/* Left: scale on staff */}
-      <div className="flex-1 flex flex-col border-r border-ink-700/40 p-4 overflow-y-auto">
-        <div className="panel-label mb-2">
+      <div className="flex-1 flex flex-col border-r border-ink-700/40 p-4 overflow-y-auto relative">
+        <div className="panel-label mb-2 text-right">
           Scale · {activeScale.root} {activeScale.name}
         </div>
         <ScaleStaff scaleNotes={activeScale.notes} root={activeScale.root} />
       </div>
 
-      {/* Right: chords in key */}
+      {/* Right: chords in key, grouped by name */}
       <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-        <div className="panel-label mb-2">
+        <div className="panel-label mb-2 text-right">
           Chords in Key
           {selectedCagedPosition !== null && (
             <span className="ml-1 text-gold-400 normal-case">(pos {selectedCagedPosition + 1})</span>
           )}
           {selectedOctaveRun !== null && (
-            <span className="ml-1 text-gold-400 normal-case">(oct {selectedOctaveRun + 1})</span>
+            <span className="ml-1 text-gold-400 normal-case">(octave filtered)</span>
           )}
         </div>
-        {filteredChords.length === 0 ? (
+        {chordGroups.length === 0 ? (
           <div className="text-chrome-500 text-sm">No matching chords in this position.</div>
         ) : (
-          <div className="flex flex-wrap gap-3">
-            {filteredChords.map(chord => (
-              <ChordBox key={chord.id} chord={chord} size="md" neutral
-                onSelect={handleChordSelect}
-                selected={selectedScaleChord?.id === chord.id} />
+          <div className="space-y-4">
+            {chordGroups.map(([name, voicings]) => (
+              <div key={name}>
+                <div className="flex items-baseline gap-2 mb-1.5 border-b border-ink-700/40 pb-1">
+                  <span className="font-serif italic text-lg text-chrome-100">{name}</span>
+                  <span className="text-[10px] text-chrome-500">
+                    {voicings.length} voicing{voicings.length > 1 ? 's' : ''} · same notes, different spots
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {voicings.map(chord => (
+                    <ChordBox key={chord.id} chord={chord} size="md" neutral
+                      subtitle={voicingPosition(chord.fingering)}
+                      onSelect={handleChordSelect}
+                      selected={selectedScaleChord?.id === chord.id} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -178,12 +258,13 @@ function ChordView({ selectedChord }) {
     <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden anim-fade-up">
       {/* Left: all voicings */}
       <div className="flex-1 flex flex-col border-r border-ink-700/40 p-4 overflow-y-auto">
-        <div className="panel-label mb-2">
+        <div className="panel-label mb-2 text-right">
           {selectedChord.name} — Voicings
         </div>
         <div className="flex flex-wrap gap-3">
           {voicings.map(v => (
             <ChordBox key={v.id} chord={v} size="md"
+              subtitle={voicingPosition(v.fingering)}
               onSelect={handleVoicingSelect}
               selected={selectedScaleChord?.id === v.id} />
           ))}
@@ -191,8 +272,8 @@ function ChordView({ selectedChord }) {
       </div>
 
       {/* Right: chord on staff */}
-      <div className="flex-1 flex flex-col items-center justify-center p-4">
-        <div className="panel-label mb-3">Notation</div>
+      <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
+        <div className="panel-label mb-3 absolute top-4 right-4">Notation</div>
         <ChordStaff chord={selectedScaleChord || selectedChord} />
       </div>
     </div>
@@ -244,6 +325,10 @@ export default function TrackContainer() {
   const scrollRef = useRef(null);
   const [dragging, setDragging] = useState(false);
 
+  // Resizable instrument panels (persisted)
+  const [pianoH, setPianoH] = usePanelSize('piano-h', 150, 90, 340);
+  const [guitarH, setGuitarH] = usePanelSize('guitar-h', 190, 110, 380);
+
   const handleScrub = useCallback((clientX) => {
     if (!scrollRef.current) return;
     const rect = scrollRef.current.getBoundingClientRect();
@@ -278,13 +363,15 @@ export default function TrackContainer() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-ink-950 overflow-hidden">
-      {/* Piano — static, centered */}
-      <div className="border-b border-ink-700/40 py-2 flex-shrink-0 overflow-hidden bg-ink-900/40">
+      {/* Piano — resizable height, full width */}
+      <div className="border-b border-ink-700/40 pt-2 flex-shrink-0 overflow-hidden bg-ink-900/40 flex flex-col"
+           style={{ height: pianoH }}>
         <PanelHeader label="Piano" />
-        <div className="flex justify-center px-4 overflow-hidden">
+        <div className="flex-1 min-h-0 px-4 pb-1">
           <Piano />
         </div>
       </div>
+      <DragHandle direction="row" getStart={() => pianoH} onResize={setPianoH} />
 
       {/* Middle — context-aware */}
       {showScaleView && (
@@ -304,12 +391,14 @@ export default function TrackContainer() {
       )}
       {showEmpty && <EmptyState />}
 
-      {/* Fretboard — static, centered */}
-      <div className="border-t border-ink-700/40 py-2 flex-shrink-0 overflow-hidden bg-ink-900/40">
+      {/* Fretboard — resizable height, full width */}
+      <DragHandle direction="row" getStart={() => guitarH} onResize={setGuitarH} invert />
+      <div className="border-t border-ink-700/40 pt-2 flex-shrink-0 overflow-hidden bg-ink-900/40 flex flex-col"
+           style={{ height: guitarH }}>
         <PanelHeader label="Guitar">
           {showFingerLegend && <FingerLegend />}
         </PanelHeader>
-        <div className="flex justify-center px-4 overflow-hidden">
+        <div className="flex-1 min-h-0 px-4 pb-1">
           <Fretboard />
         </div>
       </div>

@@ -12,13 +12,13 @@ export default function App() {
   const fetchScales = useStore(s => s.fetchScales);
   const isPlaying = useStore(s => s.isPlaying);
   const bpm = useStore(s => s.bpm);
-  const playbackRate = useStore(s => s.playbackRate);
   const beats = useStore(s => s.beats);
   const currentBeat = useStore(s => s.currentBeat);
   const setCurrentBeat = useStore(s => s.setCurrentBeat);
   const setIsPlaying = useStore(s => s.setIsPlaying);
   const instrument = useStore(s => s.instrument);
   const audioEnabled = useStore(s => s.audioEnabled);
+  const songSection = useStore(s => s.songSection);
 
   const lastPlayedBeat = useRef(-1);
 
@@ -36,36 +36,60 @@ export default function App() {
     lastPlayedBeat.current = currentBeat;
     const beat = beats[currentBeat];
     if (beat) {
-      const secPerQuarter = 60 / (bpm * playbackRate);
+      const secPerQuarter = 60 / bpm;
       const beatDur = (beat.duration || 0.5) * secPerQuarter;
       playBeat(beat.notes, instrument, Math.min(1.5, beatDur * 0.95));
     }
-  }, [currentBeat, beats, instrument, audioEnabled, bpm, playbackRate]);
+  }, [currentBeat, beats, instrument, audioEnabled, bpm]);
 
-  // Score-driven playback: each step waits the real gap between this beat's
-  // start and the next one's, so rhythm follows the source material.
+  // Score-driven playback with drift-free timing: every beat is scheduled
+  // against an absolute anchor (performance.now at play start), so timer
+  // overhead never accumulates and 140 BPM actually plays at 140.
+  // Respects the active section's bounds and the loop toggle.
   useEffect(() => {
     if (!isPlaying) return;
     if (beats.length === 0) return;
     let cancelled = false;
     let timerId = null;
 
+    const msPerQuarter = 60000 / bpm;
+    const { sections } = useStore.getState();
+    const range = songSection != null && sections[songSection]
+      ? sections[songSection]
+      : { startIndex: 0, endIndex: beats.length - 1 };
+
+    let anchorTime = performance.now();
+    let anchorBeatStart = beats[useStore.getState().currentBeat]?.start ?? 0;
+
     const scheduleNext = () => {
+      if (cancelled) return;
       const cur = useStore.getState().currentBeat;
-      const next = cur + 1;
-      if (next >= beats.length) {
+      let next = cur + 1;
+
+      if (next > range.endIndex) {
+        if (useStore.getState().loop) {
+          // Re-anchor and jump back to the top of the range.
+          next = range.startIndex;
+          anchorTime = performance.now() + msPerQuarter * (beats[cur]?.duration ?? 0.5);
+          anchorBeatStart = beats[next]?.start ?? 0;
+          timerId = setTimeout(() => {
+            if (cancelled) return;
+            setCurrentBeat(next);
+            scheduleNext();
+          }, Math.max(0, anchorTime - performance.now()));
+          return;
+        }
         setIsPlaying(false);
         return;
       }
-      const curStart = beats[cur]?.start ?? cur * 0.5;
+
       const nextStart = beats[next]?.start ?? next * 0.5;
-      const deltaBeats = Math.max(0.125, nextStart - curStart);
-      const ms = (deltaBeats * 60000) / (bpm * playbackRate);
+      const targetTime = anchorTime + (nextStart - anchorBeatStart) * msPerQuarter;
       timerId = setTimeout(() => {
         if (cancelled) return;
         setCurrentBeat(next);
         scheduleNext();
-      }, ms);
+      }, Math.max(0, targetTime - performance.now()));
     };
 
     scheduleNext();
@@ -73,7 +97,7 @@ export default function App() {
       cancelled = true;
       if (timerId) clearTimeout(timerId);
     };
-  }, [isPlaying, bpm, playbackRate, beats, setCurrentBeat, setIsPlaying]);
+  }, [isPlaying, bpm, beats, songSection, setCurrentBeat, setIsPlaying]);
 
   // Scale playback: traverse the currently-visible pattern as eighth notes.
   // The sequence is rebuilt from live filter state, so changing the view mode,
@@ -93,32 +117,27 @@ export default function App() {
       return;
     }
 
-    let idx = 0;
+    let step = 0; // absolute step count, never resets — keeps the clock drift-free
     let timerId = null;
     let cancelled = false;
-    const stepMs = () => {
-      const { bpm: b, playbackRate: rate } = useStore.getState();
-      return (0.5 * 60000) / (b * rate); // eighth notes
-    };
+    const anchorTime = performance.now();
+    const stepMs = () => (0.5 * 60000) / useStore.getState().bpm; // eighth notes
 
     const tick = () => {
       if (cancelled) return;
       const st = useStore.getState();
-      if (idx >= sequence.length) {
-        if (st.scaleLoop) {
-          idx = 0;
-        } else {
-          st.setIsScalePlaying(false);
-          return;
-        }
+      const idx = step % sequence.length;
+      if (step > 0 && idx === 0 && !st.loop) {
+        st.setIsScalePlaying(false);
+        return;
       }
       const item = sequence[idx];
-      st.setScalePlayheadNote(item);
+      st.setScalePlayhead({ note: item, idx, total: sequence.length });
       if (st.audioEnabled) {
         playBeat([item], st.instrument, Math.min(0.9, (stepMs() / 1000) * 1.8));
       }
-      idx += 1;
-      timerId = setTimeout(tick, stepMs());
+      step += 1;
+      timerId = setTimeout(tick, Math.max(0, anchorTime + step * stepMs() - performance.now()));
     };
 
     unlockAudio();
@@ -126,7 +145,7 @@ export default function App() {
     return () => {
       cancelled = true;
       if (timerId) clearTimeout(timerId);
-      useStore.getState().setScalePlayheadNote(null);
+      useStore.getState().setScalePlayhead(null);
     };
   }, [isScalePlaying, activeScale, scaleViewMode, selectedCagedPosition, selectedOctaveRun]);
 

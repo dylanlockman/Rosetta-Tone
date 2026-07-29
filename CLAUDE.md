@@ -58,7 +58,9 @@ Fretboard / Piano / NotationView / TabView / TransportBar (all subscribe)
 
 - **Fret inference** (`utils/fretInference.js`): beam search assigning string/fret to pitch-only sources; events outside guitar range keep `string/fret = null` and render only on the piano (views must guard for null).
 - **Tab timing inference** (`utils/tabParser.js`): bar lines make each measure one bar of the time signature, event starts proportional to column position (sixteenth-quantized); barline-free staves fall back to uniform eighths.
-- Playback (`App.jsx`) steps beats using real start-time deltas, so rhythm follows the source. `playbackRate` (½×/¾×/1×) is a practice speed multiplier; there is no subdivision setting anymore.
+- Playback (`App.jsx`) schedules every beat against an absolute clock anchor (`performance.now`), so timer overhead never accumulates — 140 BPM plays at 140. Respects the active section range and the `loop` toggle.
+- **Key shift** (`transpose` in store, − K + stepper in transport): capo-style — frets slide with the shift, notes falling off the neck re-map to the nearest position (`utils/transpose.js`). Beats re-derive from the untouched canonical score.
+- **Sections**: tab sources with `[Intro]`/`[Verse]`-style label lines get `score.meta.sections` `[{name, startBeat}]`; the store maps them to beat ranges, SongView shows pills to isolate one, the transport scrubber shows boundary ticks, and playback bounds/loops to the active section.
 
 ### String Numbering
 
@@ -75,11 +77,15 @@ Throughout the codebase: **string 1 = high E, string 6 = low E**. `STANDARD_TUNI
 ││         ├────────────────────────────────────────────┤│
 ││         │  Fretboard (24-fret, always visible)       ││
 │└─────────┴────────────────────────────────────────────┘│
-├─ TransportBar (play · beats · scrubber · BPM · speed) ─┤
+├─ TransportBar (play · loop · beats · scrubber · BPM · key) ┤
 └────────────────────────────────────────────────────────┘
 ```
 
 Keyboard: **Space** play/pause (song or scale, context-aware), **←/→** step beat, **Home** rewind. Shortcuts are ignored while typing in inputs.
+
+Panels are resizable (piano height, guitar height, library width) via `useResizable.jsx` drag handles; sizes persist in localStorage. Both instrument SVGs scale to fill their panel (`viewBox` + meet). Panel labels sit top-right; the finger legend sits top-left of the guitar panel in song mode. The bottom transport drives **both** song playback and scale playback (in scale view the play button, counter, and progress reflect the pattern sequence).
+
+**Cross-highlight**: hovering any note on the fretboard or piano sets `hoverMidi` in the store; the other instrument shows dashed gold rings on every matching position. (A structural "Pitch Map" view — strings plotted in pitch space above the keys — is the planned follow-up.)
 
 ### API
 
@@ -122,7 +128,9 @@ The Scale Explorer is available in the Library panel's Scales tab. Features:
 - **Octave run filter**: ROYGBIV-colored buttons to filter by octave pass
 - Boundary notes (where two octave runs meet) render with a 45° diagonal split on both fretboard and piano
 - Scale data computed in `frontend/src/utils/scalePositions.js` (CAGED + diagonal), colors in `frontend/src/utils/scaleColors.js`
-- **Scale playback**: Play/loop buttons in the Scales sidebar (Space also works). Plays *whatever is currently visible* — the selected CAGED box, the diagonal run, or the full/octave-filtered scale — as eighth notes at the transport BPM, ascending then descending. Sequence built in `frontend/src/utils/scaleSequence.js`; a traveling gold halo highlights the active note on both fretboard and piano (`scalePlayheadNote` in the store). Changing filters mid-playback restarts on the new pattern.
+- **Scale playback**: Play/loop from the Scales sidebar *or the bottom transport* (Space also works). Plays *whatever is currently visible* — the selected CAGED box, the diagonal run, or the full/octave-filtered scale — as eighth notes at the transport BPM, ascending then descending. Sequence built in `frontend/src/utils/scaleSequence.js`; a traveling gold halo highlights the active note on both fretboard and piano (`scalePlayhead` in the store). Changing filters mid-playback restarts on the new pattern; filters are sticky across view-mode switches.
+- **Octave-run semantics** (`scaleColors.js`): a boundary root STARTS run N and ENDS run N−1 (`runIndex`/`prevRunIndex`). Octave filter buttons are labeled with real octaves (C2, C3…), and ScaleStaff renders the selected run's true pitches on a treble-8vb staff (guitar notation convention, also used by ChordStaff).
+- **Chords in Key** groups alternate voicings under one chord-name header with neck-position labels (Open / 5fr / …) — same pitch classes, different physical spellings.
 
 ## Piano
 

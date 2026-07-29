@@ -19,21 +19,32 @@ import { createScore, createEvent, scoreToBeats } from './score.js';
 // number scanning, and 'x' (muted hit) produces no note event.
 
 const STRING_LABEL_RE = /^\s*([eEbBgGdDaA])\s*(\|)/;
+const SECTION_RE = /^\s*\[([^\]]+)\]\s*$/; // [Intro], [Verse 1], [Solo] …
 const BEAT_QUANT = 0.25; // sixteenth-note grid
 
 function isTabLine(line) {
   return STRING_LABEL_RE.test(line);
 }
 
-// Identify groups of 6 consecutive tab lines (a "stave").
+// Identify groups of 6 consecutive tab lines (a "stave"), keeping track of
+// [Section] label lines so each stave knows which song section it belongs to.
+// Returns [{ lines: [6 lines], section: string|null }].
 function findStaves(lines) {
   const staves = [];
   let current = [];
+  let pendingSection = null;
   for (const line of lines) {
+    const sectionMatch = line.match(SECTION_RE);
+    if (sectionMatch) {
+      pendingSection = sectionMatch[1].trim();
+      current = [];
+      continue;
+    }
     if (isTabLine(line)) {
       current.push(line);
       if (current.length === 6) {
-        staves.push(current);
+        staves.push({ lines: current, section: pendingSection });
+        pendingSection = null; // only the first stave after a label starts the section
         current = [];
       }
     } else if (current.length > 0) {
@@ -80,7 +91,11 @@ function splitMeasures(padded) {
     if (padded.every(line => line[col] === '|')) barCols.push(col);
   }
 
-  if (barCols.length === 0) return null; // no internal bar lines
+  // Only a terminating bar line (or none at all) means the stave carries no
+  // internal timing structure — let the caller use the uniform-eighths
+  // fallback instead of squeezing the whole stave into one bar.
+  const internal = barCols.filter(c => c < len * 0.9);
+  if (internal.length === 0) return null;
 
   const measures = [];
   let prev = 0;
@@ -187,8 +202,12 @@ export function tabToScore(rawText, meta = {}) {
   if (!rawText) return score;
   const staves = findStaves(rawText.split(/\r?\n/));
 
+  const sections = [];
   let cursorBeat = 0;
-  for (const stave of staves) {
+  for (const { lines: stave, section } of staves) {
+    if (section) {
+      sections.push({ name: section, startBeat: cursorBeat });
+    }
     const stringMap = getStringMapping(stave);
     const bodies = stave.map(stripPrefix);
     const maxLen = Math.max(...bodies.map(b => b.length));
@@ -212,6 +231,9 @@ export function tabToScore(rawText, meta = {}) {
     }
   }
 
+  if (sections.length > 0) {
+    score.meta.sections = sections;
+  }
   return score;
 }
 

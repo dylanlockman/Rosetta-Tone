@@ -1,35 +1,50 @@
 import { useEffect, useRef } from 'react';
 import { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } from 'vexflow';
+import { useStore } from '../store/useStore.js';
 import { noteToMidi, CHROMATIC_SCALE } from '../utils/musicTheory.js';
 
-// Render a scale as ascending notes on a VexFlow treble clef staff (one octave).
+// Render a scale as ascending notes on a treble-8vb staff (guitar convention:
+// written an octave above sounding pitch). When an octave run is selected in
+// the sidebar, the staff shows that run's REAL octaves — selecting the C3 run
+// draws C3..C4, not a fixed reference octave.
 export default function ScaleStaff({ scaleNotes, root }) {
   const containerRef = useRef(null);
+  const selectedOctaveRun = useStore(s => s.selectedOctaveRun);
+  const scaleOctaveRuns = useStore(s => s.scaleOctaveRuns);
 
   useEffect(() => {
     if (!containerRef.current || !scaleNotes || scaleNotes.length === 0) return;
     containerRef.current.innerHTML = '';
 
-    // Build ascending notes starting from root in octave 4
-    const rootIdx = CHROMATIC_SCALE.indexOf(root || scaleNotes[0]);
-    const startOctave = rootIdx >= 5 ? 3 : 4;
-    let octave = startOctave;
-    let prevMidi = 0;
+    let noteData;
+    if (selectedOctaveRun !== null && scaleOctaveRuns.length > 0) {
+      // Exact pitches of the selected run, including the boundary root on top
+      noteData = scaleOctaveRuns
+        .filter(r => r.runIndex === selectedOctaveRun ||
+          (r.isBoundary && r.prevRunIndex === selectedOctaveRun))
+        .map(r => ({ note: r.pitchClass, octave: r.octave }));
+    } else {
+      // No run selected: one reference octave starting from the root
+      const rootIdx = CHROMATIC_SCALE.indexOf(root || scaleNotes[0]);
+      const startOctave = rootIdx >= 5 ? 3 : 4;
+      let octave = startOctave;
+      let prevMidi = 0;
 
-    const noteData = scaleNotes.map((note) => {
-      const midi = noteToMidi(note, octave);
-      if (midi !== null && midi <= prevMidi) {
-        octave++;
-      }
-      prevMidi = noteToMidi(note, octave) || prevMidi;
-      return { note, octave };
-    });
+      noteData = scaleNotes.map((note) => {
+        const midi = noteToMidi(note, octave);
+        if (midi !== null && midi <= prevMidi) {
+          octave++;
+        }
+        prevMidi = noteToMidi(note, octave) || prevMidi;
+        return { note, octave };
+      });
 
-    // Add the root an octave up to complete the scale
-    noteData.push({
-      note: scaleNotes[0],
-      octave: octave + (noteToMidi(scaleNotes[0], octave) <= prevMidi ? 1 : 0),
-    });
+      // Add the root an octave up to complete the scale
+      noteData.push({
+        note: scaleNotes[0],
+        octave: octave + (noteToMidi(scaleNotes[0], octave) <= prevMidi ? 1 : 0),
+      });
+    }
 
     const numNotes = noteData.length;
     const noteSpacing = 55;
@@ -44,13 +59,13 @@ export default function ScaleStaff({ scaleNotes, root }) {
     context.setStrokeStyle('#B9BCC5');
 
     const stave = new Stave(10, 20, staveWidth);
-    stave.addClef('treble');
+    stave.addClef('treble', 'default', '8vb');
     stave.setContext(context);
     stave.setStyle({ strokeStyle: '#B9BCC5', fillStyle: '#B9BCC5' });
     stave.draw();
 
     const vexNotes = noteData.map(({ note, octave }) => {
-      const key = `${note.toLowerCase()}/${octave}`;
+      const key = `${note.toLowerCase()}/${octave + 1}`; // written 8va above sounding
       const staveNote = new StaveNote({ keys: [key], duration: 'q', clef: 'treble' });
       if (note.includes('#')) {
         staveNote.addModifier(new Accidental('#'), 0);
@@ -80,11 +95,11 @@ export default function ScaleStaff({ scaleNotes, root }) {
         label.setAttribute('font-size', '11');
         label.setAttribute('font-family', 'ui-sans-serif, system-ui');
         label.setAttribute('font-weight', '600');
-        label.textContent = noteData[i].note;
+        label.textContent = `${noteData[i].note}${noteData[i].octave}`;
         svg.appendChild(label);
       });
     }
-  }, [scaleNotes, root]);
+  }, [scaleNotes, root, selectedOctaveRun, scaleOctaveRuns]);
 
   if (!scaleNotes || scaleNotes.length === 0) {
     return <div className="text-chrome-500 text-sm p-4">Select a scale to view notation.</div>;

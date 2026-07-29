@@ -49,16 +49,19 @@ export function computeScaleOctaveRuns(scaleNotes, startOctave = 2, endOctave = 
 
       const isRoot = pitchClass === root;
 
-      // When we hit the root above the very first one, we start a new run
-      // but the root itself is a boundary (belongs to both runs)
+      // When we hit the root above the very first one, we start a new run.
+      // The root itself is a boundary belonging to both runs: it STARTS the
+      // new run (runIndex) and ENDS the previous one (prevRunIndex). Getting
+      // this backwards makes "octave N" select D..A of N plus the roots of
+      // N+1 and N+2 — the classic C5-instead-of-C3 bug.
       if (isRoot && results.length > 0) {
         results.push({
           note: pitchClass,
           octave,
           pitchClass,
-          runIndex,
+          runIndex: runIndex + 1,
           isBoundary: true,
-          prevRunIndex: runIndex - 1 >= 0 ? runIndex - 1 : 0,
+          prevRunIndex: runIndex,
         });
         runIndex++;
       } else {
