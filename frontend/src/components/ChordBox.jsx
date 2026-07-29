@@ -36,11 +36,11 @@ export default function ChordBox({ chord, size = 'md', neutral = false, onSelect
   return (
     <div
       className={`inline-flex flex-col items-center rounded-lg p-1 transition-colors ${
-        onSelect ? 'cursor-pointer hover:bg-slate-700/50' : ''
-      } ${selected ? 'bg-slate-700/70 ring-1 ring-cyan-400' : ''}`}
+        onSelect ? 'cursor-pointer hover:bg-ink-800/60' : ''
+      } ${selected ? 'bg-ink-800/80 ring-1 ring-gold-400' : ''}`}
       onClick={onSelect ? () => onSelect(chord) : undefined}
     >
-      <div className="text-xs font-semibold text-slate-200 mb-1">{chord.name}</div>
+      <div className="text-xs font-semibold text-chrome-100 mb-1">{chord.name}</div>
       <svg width={width} height={height}>
         {/* Nut (thick bar for open position) */}
         {isOpen && (
@@ -111,12 +111,12 @@ export default function ChordBox({ chord, size = 'md', neutral = false, onSelect
 
           const cx = s(leftMargin + stringIdx * stringSpacing);
           const cy = s(topMargin + fretOffset * fretSpacing + fretSpacing / 2);
-          const color = neutral ? '#22d3ee' : getFingerColor(f.finger);
+          const color = neutral ? '#F5B848' : getFingerColor(f.finger);
 
           return (
             <g key={`dot-${i}`}>
               <circle cx={cx} cy={cy} r={s(dotRadius)}
-                fill={color} stroke="#0f172a" strokeWidth={s(1)} />
+                fill={color} stroke="#0B0C10" strokeWidth={s(1)} />
               {f.finger > 0 && (
                 <text x={cx} y={cy + s(3.5)}
                   fill="#fff" fontSize={s(8)} fontWeight="700"

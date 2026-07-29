@@ -11,7 +11,41 @@ import ChordBox from './ChordBox.jsx';
 import { generateVoicings } from '../utils/chordVoicings.js';
 import { fretToNote } from '../utils/musicTheory.js';
 import { getRunInfo } from '../utils/scaleColors.js';
+import { FINGER_COLORS } from '../utils/noteColors.js';
 import { BEAT_WIDTH, LEFT_GUTTER, RIGHT_PADDING, xToBeat } from './trackLayout.js';
+
+const FINGER_LEGEND = [
+  { finger: 1, label: 'Index' },
+  { finger: 2, label: 'Middle' },
+  { finger: 3, label: 'Ring' },
+  { finger: 4, label: 'Pinky' },
+  { finger: 'T', label: 'Thumb' },
+];
+
+function PanelHeader({ label, children }) {
+  return (
+    <div className="flex items-center justify-between px-3 mb-1">
+      <span className="panel-label">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function FingerLegend() {
+  return (
+    <div className="flex items-center gap-3">
+      {FINGER_LEGEND.map(f => (
+        <div key={f.finger} className="flex items-center gap-1">
+          <span
+            className="inline-block w-2 h-2 rounded-full"
+            style={{ backgroundColor: FINGER_COLORS[f.finger] }}
+          />
+          <span className="text-[10px] text-chrome-500">{f.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function SongView({ beats, scrollRef, dragging, setDragging, handleScrub }) {
   const onMouseDown = (e) => { setDragging(true); handleScrub(e.clientX); };
@@ -23,7 +57,7 @@ function SongView({ beats, scrollRef, dragging, setDragging, handleScrub }) {
   return (
     <div
       ref={scrollRef}
-      className="flex-1 overflow-x-auto overflow-y-auto select-none min-h-0 min-w-0"
+      className="flex-1 overflow-x-auto overflow-y-auto select-none min-h-0 min-w-0 anim-fade-up"
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
@@ -31,16 +65,12 @@ function SongView({ beats, scrollRef, dragging, setDragging, handleScrub }) {
       style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
     >
       <div className="relative" style={{ width: totalWidth, minWidth: totalWidth }}>
-        <div className="border-b border-slate-800 py-2">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1">
-            Sheet Music
-          </div>
+        <div className="border-b border-ink-700/40 py-2">
+          <div className="panel-label px-3 mb-1">Sheet Music</div>
           <NotationView />
         </div>
-        <div className="border-b border-slate-800 py-2">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1">
-            Tab
-          </div>
+        <div className="border-b border-ink-700/40 py-2">
+          <div className="panel-label px-3 mb-1">Tab</div>
           <TabView />
         </div>
         <Playhead />
@@ -66,7 +96,6 @@ function ScaleView({ activeScale, chordsInKey }) {
   const filteredChords = useMemo(() => {
     let result = chordsInKey;
 
-    // Filter by CAGED position fret range
     if (selectedCagedPosition !== null && cagedPositions[selectedCagedPosition]) {
       const pos = cagedPositions[selectedCagedPosition];
       result = result.filter(chord => {
@@ -78,7 +107,6 @@ function ScaleView({ activeScale, chordsInKey }) {
       });
     }
 
-    // Filter by octave run — keep chords whose notes fall within the octave range
     if (selectedOctaveRun !== null && scaleOctaveRuns.length > 0) {
       result = result.filter(chord => {
         return chord.fingering.some(f => {
@@ -97,28 +125,28 @@ function ScaleView({ activeScale, chordsInKey }) {
   }, [chordsInKey, selectedCagedPosition, cagedPositions, selectedOctaveRun, scaleOctaveRuns]);
 
   return (
-    <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+    <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden anim-fade-up">
       {/* Left: scale on staff */}
-      <div className="flex-1 flex flex-col border-r border-slate-800 p-4 overflow-y-auto">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-          Scale: {activeScale.root} {activeScale.name}
+      <div className="flex-1 flex flex-col border-r border-ink-700/40 p-4 overflow-y-auto">
+        <div className="panel-label mb-2">
+          Scale · {activeScale.root} {activeScale.name}
         </div>
         <ScaleStaff scaleNotes={activeScale.notes} root={activeScale.root} />
       </div>
 
       {/* Right: chords in key */}
       <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+        <div className="panel-label mb-2">
           Chords in Key
           {selectedCagedPosition !== null && (
-            <span className="ml-1 text-cyan-400">(pos {selectedCagedPosition + 1})</span>
+            <span className="ml-1 text-gold-400 normal-case">(pos {selectedCagedPosition + 1})</span>
           )}
           {selectedOctaveRun !== null && (
-            <span className="ml-1 text-cyan-400">(oct {selectedOctaveRun + 1})</span>
+            <span className="ml-1 text-gold-400 normal-case">(oct {selectedOctaveRun + 1})</span>
           )}
         </div>
         {filteredChords.length === 0 ? (
-          <div className="text-slate-500 text-sm">No matching chords in this position.</div>
+          <div className="text-chrome-500 text-sm">No matching chords in this position.</div>
         ) : (
           <div className="flex flex-wrap gap-3">
             {filteredChords.map(chord => (
@@ -137,7 +165,6 @@ function ChordView({ selectedChord }) {
   const selectedScaleChord = useStore(s => s.selectedScaleChord);
   const setSelectedScaleChord = useStore(s => s.setSelectedScaleChord);
 
-  // Generate all voicings for the selected chord
   const voicings = useMemo(() => {
     if (!selectedChord) return [];
     return generateVoicings(selectedChord);
@@ -148,10 +175,10 @@ function ChordView({ selectedChord }) {
   };
 
   return (
-    <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+    <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden anim-fade-up">
       {/* Left: all voicings */}
-      <div className="flex-1 flex flex-col border-r border-slate-800 p-4 overflow-y-auto">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+      <div className="flex-1 flex flex-col border-r border-ink-700/40 p-4 overflow-y-auto">
+        <div className="panel-label mb-2">
           {selectedChord.name} — Voicings
         </div>
         <div className="flex flex-wrap gap-3">
@@ -165,10 +192,40 @@ function ChordView({ selectedChord }) {
 
       {/* Right: chord on staff */}
       <div className="flex-1 flex flex-col items-center justify-center p-4">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-3">
-          Notation
-        </div>
+        <div className="panel-label mb-3">Notation</div>
         <ChordStaff chord={selectedScaleChord || selectedChord} />
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-6 anim-fade-up">
+      <div className="text-center">
+        <div className="font-serif italic text-5xl text-chrome-100 tracking-tight">
+          Rosetta<span className="text-gold-400">Tone</span>
+        </div>
+        <div className="text-chrome-500 text-sm mt-2 tracking-wide">
+          one score · four views — tab, staff, fretboard, keys
+        </div>
+      </div>
+      <div className="flex gap-3 text-xs text-chrome-400">
+        <div className="px-4 py-3 rounded-lg border border-ink-700/60 bg-ink-900/60 text-center w-40">
+          <div className="text-chrome-100 font-medium mb-0.5">Add a song</div>
+          Paste a tab or drop a MusicXML / MIDI file
+        </div>
+        <div className="px-4 py-3 rounded-lg border border-ink-700/60 bg-ink-900/60 text-center w-40">
+          <div className="text-chrome-100 font-medium mb-0.5">Explore scales</div>
+          CAGED boxes, diagonal runs, chords in key
+        </div>
+        <div className="px-4 py-3 rounded-lg border border-ink-700/60 bg-ink-900/60 text-center w-40">
+          <div className="text-chrome-100 font-medium mb-0.5">Learn chords</div>
+          Voicings up the neck, spelled on the staff
+        </div>
+      </div>
+      <div className="text-chrome-500 text-[11px] font-mono">
+        space — play · ← → — step · home — rewind
       </div>
     </div>
   );
@@ -217,14 +274,13 @@ export default function TrackContainer() {
   const showChordView = activeSection === 'chords' && selectedChord;
   const showSongView = !showScaleView && !showChordView && beats.length > 0;
   const showEmpty = !showScaleView && !showChordView && !showSongView;
+  const showFingerLegend = showSongView;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-slate-950 overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-ink-950 overflow-hidden">
       {/* Piano — static, centered */}
-      <div className="border-b border-slate-800 py-2 flex-shrink-0 overflow-hidden">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1">
-          Piano
-        </div>
+      <div className="border-b border-ink-700/40 py-2 flex-shrink-0 overflow-hidden bg-ink-900/40">
+        <PanelHeader label="Piano" />
         <div className="flex justify-center px-4 overflow-hidden">
           <Piano />
         </div>
@@ -246,17 +302,13 @@ export default function TrackContainer() {
           handleScrub={handleScrub}
         />
       )}
-      {showEmpty && (
-        <div className="flex-1 flex items-center justify-center text-slate-500">
-          Add a song or click one in the library to get started.
-        </div>
-      )}
+      {showEmpty && <EmptyState />}
 
       {/* Fretboard — static, centered */}
-      <div className="border-t border-slate-800 py-2 flex-shrink-0 overflow-hidden">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 mb-1">
-          Guitar
-        </div>
+      <div className="border-t border-ink-700/40 py-2 flex-shrink-0 overflow-hidden bg-ink-900/40">
+        <PanelHeader label="Guitar">
+          {showFingerLegend && <FingerLegend />}
+        </PanelHeader>
         <div className="flex justify-center px-4 overflow-hidden">
           <Fretboard />
         </div>

@@ -20,37 +20,29 @@ const BLACK_KEY_OFFSETS = {
 };
 
 // 88 keys: A0 to C8
-// White keys: A0, B0, then C1-B7 (7*7=49), then C8 = 2 + 49 + 1 = 52
-// Build the full key list once
 function build88Keys() {
   const whites = [];
   const blacks = [];
   let whiteIdx = 0;
 
-  // A0, B0 (partial first octave — no C0/D0/E0/F0/G0 on a real piano)
   for (const note of ['A', 'B']) {
     whites.push({ note, octave: 0, whiteIdx });
     whiteIdx++;
   }
-  // A#0 / Bb0
-  blacks.push({ note: 'A#', octave: 0, afterWhiteIdx: 0 }); // after A0
+  blacks.push({ note: 'A#', octave: 0, afterWhiteIdx: 0 });
 
-  // Full octaves 1-7
   for (let oct = 1; oct <= 7; oct++) {
     WHITE_NOTES.forEach((note) => {
       whites.push({ note, octave: oct, whiteIdx });
       whiteIdx++;
     });
     Object.entries(BLACK_KEY_OFFSETS).forEach(([note, offset]) => {
-      // The black key sits after the white key at position (octaveStart + offset)
-      const octStart = 2 + (oct - 1) * 7; // whiteIdx where this octave starts
+      const octStart = 2 + (oct - 1) * 7;
       blacks.push({ note, octave: oct, afterWhiteIdx: octStart + offset });
     });
   }
 
-  // C8 (final key)
   whites.push({ note: 'C', octave: 8, whiteIdx });
-
   return { whites, blacks };
 }
 
@@ -69,7 +61,7 @@ function SplitKey({ x, y, w, h, color1, color2, id, rx = 2 }) {
       </defs>
       <rect x={x} y={y} width={w} height={h} fill={color1} clipPath={`url(#split-key-tl-${id})`} rx={rx} />
       <rect x={x} y={y} width={w} height={h} fill={color2} clipPath={`url(#split-key-br-${id})`} rx={rx} />
-      <rect x={x} y={y} width={w} height={h} fill="none" stroke="#1e293b" strokeWidth={1} rx={rx} />
+      <rect x={x} y={y} width={w} height={h} fill="none" stroke="#0B0C10" strokeWidth={1} rx={rx} />
     </g>
   );
 }
@@ -83,6 +75,7 @@ export default function Piano() {
   const selectedCagedPosition = useStore(s => s.selectedCagedPosition);
   const cagedPositions = useStore(s => s.cagedPositions);
   const selectedScaleChord = useStore(s => s.selectedScaleChord);
+  const scalePlayheadNote = useStore(s => s.scalePlayheadNote);
   const activeBeat = beats[currentBeat];
   const activeNotes = activeBeat?.notes || [];
 
@@ -94,7 +87,6 @@ export default function Piano() {
       if (f.fret < 0) continue;
       const info = fretToNote(f.string, f.fret);
       if (info) {
-        // Highlight this pitch class in all octaves on the piano
         const pc = info.note;
         for (let oct = 0; oct <= 8; oct++) {
           const m = noteToMidi(pc, oct);
@@ -107,14 +99,16 @@ export default function Piano() {
 
   const totalWhiteKeys = KEYS_88.whites.length; // 52
   const width = totalWhiteKeys * WHITE_KEY_WIDTH + 4;
-  const height = WHITE_KEY_HEIGHT + 8;
+  const height = WHITE_KEY_HEIGHT + 12;
+
+  const playheadMidi = scaleViewActive && scalePlayheadNote ? scalePlayheadNote.midi : null;
 
   // Build active map by midi (song mode)
   const activeByMidi = useMemo(() => {
     const map = new Map();
     if (!scaleViewActive) {
       for (const n of activeNotes) {
-        const midi = noteToMidi(n.note, n.octave);
+        const midi = n.midi ?? noteToMidi(n.note, n.octave);
         if (midi != null) map.set(midi, n);
       }
     }
@@ -130,8 +124,6 @@ export default function Piano() {
         !(runInfo.isBoundary && runInfo.prevRunIndex === selectedOctaveRun)) {
       return false;
     }
-    // CAGED position filter doesn't directly apply to piano (it's a guitar concept)
-    // but we can filter by which notes appear in the selected position's fret range
     if (selectedCagedPosition !== null && cagedPositions.length > 0) {
       const pos = cagedPositions[selectedCagedPosition];
       if (pos) {
@@ -143,7 +135,7 @@ export default function Piano() {
     return true;
   };
 
-  const whiteKeys = KEYS_88.whites.map((k, i) => {
+  const whiteKeys = KEYS_88.whites.map((k) => {
     const x = k.whiteIdx * WHITE_KEY_WIDTH + 2;
     const midi = noteToMidi(k.note, k.octave);
     const runInfo = scaleViewActive ? getRunInfo(scaleOctaveRuns, k.note, k.octave) : null;
@@ -152,7 +144,7 @@ export default function Piano() {
     return { ...k, x, midi, active: activeByMidi.get(midi), runInfo, filtered, chordHighlight };
   });
 
-  const blackKeys = KEYS_88.blacks.map((k, i) => {
+  const blackKeys = KEYS_88.blacks.map((k) => {
     const x = (k.afterWhiteIdx + 1) * WHITE_KEY_WIDTH - BLACK_KEY_WIDTH / 2 + 2;
     const midi = noteToMidi(k.note, k.octave);
     const runInfo = scaleViewActive ? getRunInfo(scaleOctaveRuns, k.note, k.octave) : null;
@@ -161,42 +153,74 @@ export default function Piano() {
     return { ...k, x, midi, active: activeByMidi.get(midi), runInfo, filtered, chordHighlight };
   });
 
-  // Show label only on C keys for compactness
-  const showLabel = (note, octave) => note === 'C';
+  const showLabel = (note) => note === 'C';
+  const pressed = (k) => Boolean(k.active) || k.midi === playheadMidi;
 
   return (
     <svg width={width} height={height} className="block">
+      <defs>
+        <linearGradient id="ivory" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#DFDCD3" />
+          <stop offset="0.85" stopColor="#F2F0EA" />
+          <stop offset="1" stopColor="#E4E1D8" />
+        </linearGradient>
+        <linearGradient id="ebonyKey" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#2A2D35" />
+          <stop offset="0.12" stopColor="#14161B" />
+          <stop offset="1" stopColor="#1D2027" />
+        </linearGradient>
+        <filter id="keyGlow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      {/* Felt strip above the keys */}
+      <rect x={0} y={0} width={width} height={4} fill="#7F1D1D" rx={1} />
+
       {/* White keys */}
       {whiteKeys.map((k, i) => {
         const kw = WHITE_KEY_WIDTH - 1;
-        const label = showLabel(k.note, k.octave) ? `C${k.octave}` : '';
+        const label = showLabel(k.note) ? `C${k.octave}` : '';
+        const isPressed = pressed(k);
+        const dy = isPressed ? 1.5 : 0;
 
         // Scale mode — in scale
         if (scaleViewActive && k.runInfo) {
+          const isPlayhead = k.midi === playheadMidi;
           if (k.filtered) {
             return (
               <g key={`w-${i}`}>
-                <rect x={k.x} y={4} width={kw} height={WHITE_KEY_HEIGHT}
-                  fill="#d1d5db" stroke="#1e293b" strokeWidth={1} rx="2" opacity={0.3} />
+                <rect x={k.x} y={6} width={kw} height={WHITE_KEY_HEIGHT}
+                  fill="#B9BCC5" stroke="#0B0C10" strokeWidth={1} rx="2" opacity={0.25} />
               </g>
             );
           }
           if (k.runInfo.isBoundary) {
             return (
-              <g key={`w-${i}`}>
-                <SplitKey x={k.x} y={4} w={kw} h={WHITE_KEY_HEIGHT}
+              <g key={`w-${i}`} transform={isPlayhead ? 'translate(0,1.5)' : undefined}
+                 filter={isPlayhead ? 'url(#keyGlow)' : undefined} className="note-transition">
+                <SplitKey x={k.x} y={6} w={kw} h={WHITE_KEY_HEIGHT}
                   color1={getOctaveColor(k.runInfo.prevRunIndex)}
                   color2={getOctaveColor(k.runInfo.runIndex)} id={`pw-${i}`} />
-                {label && <text x={k.x + kw / 2} y={WHITE_KEY_HEIGHT - 3}
+                {isPlayhead && <rect x={k.x} y={6} width={kw} height={WHITE_KEY_HEIGHT}
+                  fill="none" stroke="#FFD98A" strokeWidth={2.5} rx="2" />}
+                {label && <text x={k.x + kw / 2} y={WHITE_KEY_HEIGHT - 1}
                   fill="#fff" fontSize="8" fontWeight="600" textAnchor="middle">{label}</text>}
               </g>
             );
           }
           return (
-            <g key={`w-${i}`}>
-              <rect x={k.x} y={4} width={kw} height={WHITE_KEY_HEIGHT}
-                fill={getOctaveColor(k.runInfo.runIndex)} stroke="#1e293b" strokeWidth={1} rx="2" />
-              {label && <text x={k.x + kw / 2} y={WHITE_KEY_HEIGHT - 3}
+            <g key={`w-${i}`} transform={isPlayhead ? 'translate(0,1.5)' : undefined}
+               filter={isPlayhead ? 'url(#keyGlow)' : undefined} className="note-transition">
+              <rect x={k.x} y={6} width={kw} height={WHITE_KEY_HEIGHT}
+                fill={getOctaveColor(k.runInfo.runIndex)} stroke="#0B0C10" strokeWidth={1} rx="2" />
+              {isPlayhead && <rect x={k.x} y={6} width={kw} height={WHITE_KEY_HEIGHT}
+                fill="none" stroke="#FFD98A" strokeWidth={2.5} rx="2" />}
+              {label && <text x={k.x + kw / 2} y={WHITE_KEY_HEIGHT - 1}
                 fill="#fff" fontSize="8" fontWeight="600" textAnchor="middle">{label}</text>}
             </g>
           );
@@ -206,25 +230,27 @@ export default function Piano() {
         if (scaleViewActive) {
           return (
             <g key={`w-${i}`}>
-              <rect x={k.x} y={4} width={kw} height={WHITE_KEY_HEIGHT}
-                fill="#e2e8f0" stroke="#1e293b" strokeWidth={1} rx="2" opacity={0.4} />
-              {label && <text x={k.x + kw / 2} y={WHITE_KEY_HEIGHT - 3}
-                fill="#94a3b8" fontSize="8" fontWeight="600" textAnchor="middle">{label}</text>}
+              <rect x={k.x} y={6} width={kw} height={WHITE_KEY_HEIGHT}
+                fill="url(#ivory)" stroke="#0B0C10" strokeWidth={1} rx="2" opacity={0.35} />
+              {label && <text x={k.x + kw / 2} y={WHITE_KEY_HEIGHT - 1}
+                fill="#8A8F9E" fontSize="8" fontWeight="600" textAnchor="middle">{label}</text>}
             </g>
           );
         }
 
         // Song mode
-        const fill = k.active ? getFingerColor(k.active.finger) : '#ffffff';
         const open = k.active && isOpen(k.active.finger);
+        const fill = k.active && !open ? getFingerColor(k.active.finger) : 'url(#ivory)';
         return (
-          <g key={`w-${i}`}>
-            <rect x={k.x} y={4} width={kw} height={WHITE_KEY_HEIGHT}
-              fill={open ? '#ffffff' : fill}
-              stroke={k.active && open ? getFingerColor(0) : '#1e293b'}
-              strokeWidth={k.active && open ? 2 : 1} rx="2" />
-            {label && <text x={k.x + kw / 2} y={WHITE_KEY_HEIGHT - 3}
-              fill={k.active && !open ? '#fff' : '#475569'}
+          <g key={`w-${i}`} transform={dy ? `translate(0,${dy})` : undefined}
+             filter={k.active && !open ? 'url(#keyGlow)' : undefined}
+             className="note-transition">
+            <rect x={k.x} y={6} width={kw} height={WHITE_KEY_HEIGHT}
+              fill={fill}
+              stroke={open ? getFingerColor(0) : '#0B0C10'}
+              strokeWidth={open ? 2 : 1} rx="2" />
+            {label && <text x={k.x + kw / 2} y={WHITE_KEY_HEIGHT - 1}
+              fill={k.active && !open ? '#fff' : '#5C6272'}
               fontSize="8" fontWeight="600" textAnchor="middle">{label}</text>}
           </g>
         );
@@ -232,28 +258,38 @@ export default function Piano() {
 
       {/* Black keys */}
       {blackKeys.map((k, i) => {
+        const isPressed = pressed(k);
+        const dy = isPressed ? 1.5 : 0;
+
         if (scaleViewActive && k.runInfo) {
+          const isPlayhead = k.midi === playheadMidi;
           if (k.filtered) {
             return (
               <g key={`b-${i}`}>
-                <rect x={k.x} y={4} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
-                  fill="#1e293b" stroke="#0f172a" strokeWidth="1" rx="1" opacity={0.3} />
+                <rect x={k.x} y={6} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
+                  fill="#1D212B" stroke="#0B0C10" strokeWidth="1" rx="1" opacity={0.3} />
               </g>
             );
           }
           if (k.runInfo.isBoundary) {
             return (
-              <g key={`b-${i}`}>
-                <SplitKey x={k.x} y={4} w={BLACK_KEY_WIDTH} h={BLACK_KEY_HEIGHT}
+              <g key={`b-${i}`} transform={isPlayhead ? 'translate(0,1.5)' : undefined}
+                 filter={isPlayhead ? 'url(#keyGlow)' : undefined} className="note-transition">
+                <SplitKey x={k.x} y={6} w={BLACK_KEY_WIDTH} h={BLACK_KEY_HEIGHT}
                   color1={getOctaveColor(k.runInfo.prevRunIndex)}
                   color2={getOctaveColor(k.runInfo.runIndex)} id={`pb-${i}`} rx={1} />
+                {isPlayhead && <rect x={k.x} y={6} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
+                  fill="none" stroke="#FFD98A" strokeWidth={2} rx="1" />}
               </g>
             );
           }
           return (
-            <g key={`b-${i}`}>
-              <rect x={k.x} y={4} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
-                fill={getOctaveColor(k.runInfo.runIndex)} stroke="#0f172a" strokeWidth="1" rx="1" />
+            <g key={`b-${i}`} transform={isPlayhead ? 'translate(0,1.5)' : undefined}
+               filter={isPlayhead ? 'url(#keyGlow)' : undefined} className="note-transition">
+              <rect x={k.x} y={6} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
+                fill={getOctaveColor(k.runInfo.runIndex)} stroke="#0B0C10" strokeWidth="1" rx="1" />
+              {isPlayhead && <rect x={k.x} y={6} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
+                fill="none" stroke="#FFD98A" strokeWidth={2} rx="1" />}
             </g>
           );
         }
@@ -261,29 +297,30 @@ export default function Piano() {
         if (scaleViewActive) {
           return (
             <g key={`b-${i}`}>
-              <rect x={k.x} y={4} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
-                fill="#0f172a" stroke="#0f172a" strokeWidth="1" rx="1" opacity={0.3} />
+              <rect x={k.x} y={6} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
+                fill="url(#ebonyKey)" stroke="#0B0C10" strokeWidth="1" rx="1" opacity={0.35} />
             </g>
           );
         }
 
-        const fill = k.active ? getFingerColor(k.active.finger) : '#0f172a';
+        const fill = k.active ? getFingerColor(k.active.finger) : 'url(#ebonyKey)';
         return (
-          <g key={`b-${i}`}>
-            <rect x={k.x} y={4} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
-              fill={fill} stroke="#0f172a" strokeWidth="1" rx="1" />
+          <g key={`b-${i}`} transform={dy ? `translate(0,${dy})` : undefined}
+             filter={k.active ? 'url(#keyGlow)' : undefined} className="note-transition">
+            <rect x={k.x} y={6} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
+              fill={fill} stroke="#0B0C10" strokeWidth="1" rx="1" />
           </g>
         );
       })}
 
-      {/* Chord highlight overlays — bright ring on keys belonging to selected chord */}
+      {/* Chord highlight overlays — gold ring on keys belonging to selected chord */}
       {chordMidiSet.size > 0 && whiteKeys.filter(k => k.chordHighlight).map((k, i) => (
-        <rect key={`whl-${i}`} x={k.x} y={4} width={WHITE_KEY_WIDTH - 1} height={WHITE_KEY_HEIGHT}
-          fill="none" stroke="#22d3ee" strokeWidth={2.5} rx="2" />
+        <rect key={`whl-${i}`} x={k.x} y={6} width={WHITE_KEY_WIDTH - 1} height={WHITE_KEY_HEIGHT}
+          fill="none" stroke="#F5B848" strokeWidth={2.5} rx="2" />
       ))}
       {chordMidiSet.size > 0 && blackKeys.filter(k => k.chordHighlight).map((k, i) => (
-        <rect key={`bhl-${i}`} x={k.x} y={4} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
-          fill="none" stroke="#22d3ee" strokeWidth={2.5} rx="1" />
+        <rect key={`bhl-${i}`} x={k.x} y={6} width={BLACK_KEY_WIDTH} height={BLACK_KEY_HEIGHT}
+          fill="none" stroke="#F5B848" strokeWidth={2.5} rx="1" />
       ))}
     </svg>
   );

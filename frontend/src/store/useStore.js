@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import axios from 'axios';
-import { parseTab } from '../utils/tabParser.js';
+import { tabToScore } from '../utils/tabParser.js';
+import { scoreToBeats, deserializeScore, serializeScore } from '../utils/score.js';
 import { inferFingerings } from '../utils/fingering.js';
 import { computeScaleOctaveRuns } from '../utils/scaleColors.js';
 import { computeCagedPositions, computeDiagonalPatterns } from '../utils/scalePositions.js';
@@ -12,7 +13,8 @@ const api = axios.create({ baseURL: '/api' });
 export const useStore = create((set, get) => ({
   songs: [],
   activeSong: null,
-  beats: [],
+  score: null,             // canonical Score for the active song
+  beats: [],               // derived from score via scoreToBeats()
   currentBeat: 0,
   chordLibrary: [],
   scales: [],
@@ -31,13 +33,17 @@ export const useStore = create((set, get) => ({
   loading: false,
   error: null,
   bpm: 90,
-  subdivision: 2, // 1 = quarter, 2 = eighth, 4 = sixteenth
+  playbackRate: 1, // practice speed multiplier: 0.5 | 0.75 | 1
   isPlaying: false,
+  // Scale playback
+  isScalePlaying: false,
+  scaleLoop: false,
+  scalePlayheadNote: null, // { string, fret, note, octave, midi } during playback
   instrument: 'piano', // 'piano' | 'guitar'
   audioEnabled: true,
 
   setBpm: (bpm) => set({ bpm: Math.max(20, Math.min(300, Number(bpm) || 90)) }),
-  setSubdivision: (subdivision) => set({ subdivision }),
+  setPlaybackRate: (playbackRate) => set({ playbackRate }),
   setScaleViewMode: (mode) => set({ scaleViewMode: mode }),
   setSelectedCagedPosition: (pos) => set({ selectedCagedPosition: pos }),
   setSelectedOctaveRun: (run) => set({ selectedOctaveRun: run }),
@@ -47,6 +53,8 @@ export const useStore = create((set, get) => ({
     const update = { activeSection: section, selectedScaleChord: null };
     if (section !== 'scales') {
       update.scaleViewActive = false;
+      update.isScalePlaying = false;
+      update.scalePlayheadNote = null;
     }
     if (section === 'music') {
       update.selectedChord = null;
@@ -56,6 +64,11 @@ export const useStore = create((set, get) => ({
   setInstrument: (instrument) => set({ instrument }),
   toggleAudio: () => set({ audioEnabled: !get().audioEnabled }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
+  setIsScalePlaying: (isScalePlaying) => set(
+    isScalePlaying ? { isScalePlaying } : { isScalePlaying, scalePlayheadNote: null }
+  ),
+  toggleScaleLoop: () => set({ scaleLoop: !get().scaleLoop }),
+  setScalePlayheadNote: (scalePlayheadNote) => set({ scalePlayheadNote }),
 
   fetchSongs: async () => {
     set({ loading: true, error: null });
@@ -104,6 +117,8 @@ export const useStore = create((set, get) => ({
         selectedCagedPosition: null,
         selectedOctaveRun: null,
         scaleViewActive: true,
+        isScalePlaying: false,
+        scalePlayheadNote: null,
       });
     } catch (e) {
       set({ error: e.message });
@@ -114,34 +129,52 @@ export const useStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const { data } = await api.get(`/songs/${id}`);
-      const parsed = parseTab(data.raw_content);
+      // Prefer the canonical Score stored at ingest; fall back to re-parsing
+      // raw tab content for songs saved before parsed_json existed.
+      let score = deserializeScore(data.parsed_json);
+      if (!score) {
+        score = tabToScore(data.raw_content, { title: data.title, artist: data.artist });
+      }
+      const beats = scoreToBeats(score);
       const { chordLibrary } = get();
-      inferFingerings(parsed.beats, chordLibrary);
+      inferFingerings(beats, chordLibrary);
       set({
         activeSong: data,
-        beats: parsed.beats,
+        score,
+        beats,
         currentBeat: 0,
         loading: false,
         scaleViewActive: false,
         selectedChord: null,
+        ...(score.meta?.bpm ? { bpm: Math.max(20, Math.min(300, Math.round(score.meta.bpm))) } : {}),
       });
     } catch (e) {
       set({ error: e.message, loading: false });
     }
   },
 
-  addSong: async ({ title, artist, raw_content, source_type = 'tab' }) => {
+  // `score` may be a prebuilt canonical Score (from the MusicXML/MIDI
+  // importers). For plain tab pastes it's built here, so parsing happens
+  // exactly once per song — at ingest.
+  addSong: async ({ title, artist, raw_content, source_type = 'tab', score = null }) => {
     set({ loading: true, error: null });
     try {
+      if (!score) {
+        score = tabToScore(raw_content, { title, artist });
+      }
+      if (score.events.length === 0) {
+        throw new Error('No notes found — check the content format.');
+      }
       const { data } = await api.post('/songs', {
         title, artist, source_type, raw_content,
+        parsed_json: serializeScore(score),
       });
       await get().fetchSongs();
       await get().loadSong(data.id);
       set({ loading: false });
       return data.id;
     } catch (e) {
-      set({ error: e.message, loading: false });
+      set({ error: e.response?.data?.error || e.message, loading: false });
       throw e;
     }
   },
@@ -151,7 +184,7 @@ export const useStore = create((set, get) => ({
       await api.delete(`/songs/${id}`);
       const { activeSong } = get();
       if (activeSong?.id === id) {
-        set({ activeSong: null, beats: [], currentBeat: 0 });
+        set({ activeSong: null, score: null, beats: [], currentBeat: 0 });
       }
       await get().fetchSongs();
     } catch (e) {

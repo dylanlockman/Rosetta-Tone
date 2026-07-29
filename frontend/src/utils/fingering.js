@@ -40,7 +40,9 @@ function applyChordFingering(beat, chord) {
     fingerByString.set(p.string, p.finger);
   }
   for (const note of beat.notes) {
-    if (note.fret === 0) {
+    if (note.fret == null) {
+      note.finger = null; // not on the guitar (out-of-range piano note)
+    } else if (note.fret === 0) {
       note.finger = 0;
     } else {
       note.finger = fingerByString.get(note.string) ?? 0;
@@ -64,6 +66,10 @@ function localPosition(beats, beatIdx) {
 
 function applyPositional(beat, position) {
   for (const note of beat.notes) {
+    if (note.fret == null) {
+      note.finger = null; // not on the guitar (out-of-range piano note)
+      continue;
+    }
     if (note.fret === 0) {
       note.finger = 0;
       continue;

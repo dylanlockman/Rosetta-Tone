@@ -1,19 +1,25 @@
-import { fretToNote } from './musicTheory.js';
+import { fretToNote, noteToMidi } from './musicTheory.js';
+import { createScore, createEvent, scoreToBeats } from './score.js';
 
-// Parse standard ASCII guitar tab into a list of note events.
+// Parse standard ASCII guitar tab into the canonical Score model.
 //
 // Input format example:
-//   e|---0---2---3---|
-//   B|---1---3---0---|
-//   G|---0---2---0---|
-//   D|---2---0---0---|
-//   A|---3---0---2---|
-//   E|---0---2---3---|
+//   e|---0---2---3---|---0---|
+//   B|---1---3---0---|---1---|
+//   ...
 //
-// Output: [{ note, octave, string, fret, duration, beatIndex }, ...]
-// Notes that occur in the same column are grouped via shared beatIndex.
+// Timing inference:
+//   - Bar lines split each stave into measures. Each measure spans one bar of
+//     the time signature (4 quarter-note beats in 4/4). An event's start is
+//     proportional to its column within the measure, quantized to sixteenths.
+//   - Staves without internal bar lines fall back to uniform eighth notes.
+//   - An event rings until the next event on any string (or the bar ends).
+//
+// Technique characters (h p b r s x ~ / \) are tolerated: they don't break
+// number scanning, and 'x' (muted hit) produces no note event.
 
-const STRING_LABEL_RE = /^\s*([eEbBgGdDaA])\s*\|/;
+const STRING_LABEL_RE = /^\s*([eEbBgGdDaA])\s*(\|)/;
+const BEAT_QUANT = 0.25; // sixteenth-note grid
 
 function isTabLine(line) {
   return STRING_LABEL_RE.test(line);
@@ -46,110 +52,172 @@ function getStringMapping(stave) {
     return m ? m[1].toLowerCase() : null;
   });
 
-  // Standard order: top line (index 0) = high e (string 1)
   const standardOrder = ['e', 'b', 'g', 'd', 'a', 'e'];
-  const matchesStandard = labels.every((l, i) => l === standardOrder[i]);
-
-  if (matchesStandard) {
+  if (labels.every((l, i) => l === standardOrder[i])) {
     return [1, 2, 3, 4, 5, 6]; // top to bottom
   }
 
-  // Reversed order: top line = low E
   const reversedOrder = ['e', 'a', 'd', 'g', 'b', 'e'];
-  const matchesReversed = labels.every((l, i) => l === reversedOrder[i]);
-  if (matchesReversed) {
+  if (labels.every((l, i) => l === reversedOrder[i])) {
     return [6, 5, 4, 3, 2, 1];
   }
 
-  // Default: assume standard
   return [1, 2, 3, 4, 5, 6];
 }
 
-// Strip the leading "X|" prefix and align lines to start at column 0
+// Strip the leading "X|" prefix so all lines start at column 0 of the body.
 function stripPrefix(line) {
-  const m = line.match(/^([^|]*\|)(.*)$/);
-  return m ? m[2] : line;
+  const m = line.match(/^[^|]*\|(.*)$/);
+  return m ? m[1] : line;
 }
 
-function parseStave(stave, beatOffset = 0) {
-  const stringMap = getStringMapping(stave);
-  const bodies = stave.map(stripPrefix);
-  // Pad lines to equal length
-  const maxLen = Math.max(...bodies.map(b => b.length));
-  const padded = bodies.map(b => b.padEnd(maxLen, '-'));
+// Split the 6 aligned bodies into measures on shared bar-line columns.
+// Returns an array of measures, each an array of 6 string segments.
+function splitMeasures(padded) {
+  const len = padded[0].length;
+  const barCols = [];
+  for (let col = 0; col < len; col++) {
+    if (padded.every(line => line[col] === '|')) barCols.push(col);
+  }
 
+  if (barCols.length === 0) return null; // no internal bar lines
+
+  const measures = [];
+  let prev = 0;
+  for (const col of [...barCols, len]) {
+    if (col > prev) {
+      const segs = padded.map(line => line.slice(prev, col));
+      // Skip empty/decorative segments (all dashes)
+      if (segs.some(s => /\d/.test(s))) measures.push(segs);
+      else if (segs.some(s => /[^-|]/.test(s))) measures.push(segs);
+    }
+    prev = col + 1;
+  }
+  return measures.length > 0 ? measures : null;
+}
+
+// Scan one measure's 6 segments for fret events.
+// Returns [{ col, stringNumber, fret }], plus the segment width.
+function scanMeasure(segments, stringMap) {
+  const width = Math.max(...segments.map(s => s.length));
   const events = [];
-  const beats = [];
-  let beatIndex = beatOffset;
-  let col = 0;
-
-  while (col < maxLen) {
-    // Collect fret numbers in this column across all 6 strings
-    const colFrets = [];
-    let consumed = 1; // how many columns this beat occupies
-
-    for (let lineIdx = 0; lineIdx < 6; lineIdx++) {
-      const ch = padded[lineIdx][col];
+  for (let lineIdx = 0; lineIdx < 6; lineIdx++) {
+    const seg = segments[lineIdx];
+    let col = 0;
+    while (col < seg.length) {
+      const ch = seg[col];
       if (ch >= '0' && ch <= '9') {
-        // Could be multi-digit; look ahead
         let numStr = ch;
         let lookahead = col + 1;
-        while (lookahead < maxLen && padded[lineIdx][lookahead] >= '0' && padded[lineIdx][lookahead] <= '9') {
-          numStr += padded[lineIdx][lookahead];
+        while (lookahead < seg.length && seg[lookahead] >= '0' && seg[lookahead] <= '9') {
+          numStr += seg[lookahead];
           lookahead++;
         }
-        consumed = Math.max(consumed, numStr.length);
-        colFrets.push({
-          stringNumber: stringMap[lineIdx],
-          fret: parseInt(numStr, 10),
-        });
+        events.push({ col, stringNumber: stringMap[lineIdx], fret: parseInt(numStr, 10) });
+        col = lookahead;
+      } else {
+        col++; // dashes, technique chars (h p b r s ~ / \), muted 'x'
       }
-    }
-
-    if (colFrets.length > 0) {
-      const beatNotes = [];
-      for (const { stringNumber, fret } of colFrets) {
-        const noteInfo = fretToNote(stringNumber, fret);
-        if (noteInfo) {
-          const ev = {
-            note: noteInfo.note,
-            octave: noteInfo.octave,
-            string: stringNumber,
-            fret,
-            duration: 'q',
-            beatIndex,
-          };
-          events.push(ev);
-          beatNotes.push(ev);
-        }
-      }
-      if (beatNotes.length > 0) {
-        beats.push({ beatIndex, notes: beatNotes });
-      }
-      beatIndex++;
-      col += consumed;
-    } else {
-      col++;
     }
   }
-
-  return { events, beats, nextBeat: beatIndex };
+  return { events, width };
 }
 
-export function parseTab(rawText) {
-  if (!rawText) return { events: [], beats: [] };
-  const lines = rawText.split(/\r?\n/);
-  const staves = findStaves(lines);
+function quantize(beat) {
+  return Math.round(beat / BEAT_QUANT) * BEAT_QUANT;
+}
 
-  const allEvents = [];
-  const allBeats = [];
-  let beatOffset = 0;
+// Convert positioned fret events into timed Score events.
+function timeMeasure(measureEvents, width, measureStartBeat, beatsPerBar) {
+  // Column → beat within the bar, proportional to position, sixteenth-quantized
+  const timed = measureEvents.map(ev => ({
+    ...ev,
+    start: measureStartBeat + quantize((ev.col / Math.max(1, width)) * beatsPerBar),
+  }));
+
+  // Group starts to compute ring-out durations: each onset rings until the
+  // next onset anywhere (or the end of the bar).
+  const starts = [...new Set(timed.map(e => e.start))].sort((a, b) => a - b);
+  const nextStart = new Map();
+  starts.forEach((s, i) => {
+    nextStart.set(s, i + 1 < starts.length ? starts[i + 1] : measureStartBeat + beatsPerBar);
+  });
+
+  return timed.map(ev => {
+    const noteInfo = fretToNote(ev.stringNumber, ev.fret);
+    if (!noteInfo) return null;
+    const duration = Math.max(BEAT_QUANT, nextStart.get(ev.start) - ev.start);
+    return createEvent({
+      start: ev.start,
+      duration,
+      note: noteInfo.note,
+      octave: noteInfo.octave,
+      midi: noteToMidi(noteInfo.note, noteInfo.octave),
+      string: ev.stringNumber,
+      fret: ev.fret,
+    });
+  }).filter(Boolean);
+}
+
+// Fallback for staves without bar lines: uniform eighth notes in onset order.
+function timeUniform(measureEvents, startBeat) {
+  const cols = [...new Set(measureEvents.map(e => e.col))].sort((a, b) => a - b);
+  const colToIdx = new Map(cols.map((c, i) => [c, i]));
+  return measureEvents.map(ev => {
+    const noteInfo = fretToNote(ev.stringNumber, ev.fret);
+    if (!noteInfo) return null;
+    return createEvent({
+      start: startBeat + colToIdx.get(ev.col) * 0.5,
+      duration: 0.5,
+      note: noteInfo.note,
+      octave: noteInfo.octave,
+      midi: noteToMidi(noteInfo.note, noteInfo.octave),
+      string: ev.stringNumber,
+      fret: ev.fret,
+    });
+  }).filter(Boolean);
+}
+
+// Parse raw ASCII tab into a canonical Score.
+export function tabToScore(rawText, meta = {}) {
+  const timeSignature = meta.timeSignature ?? [4, 4];
+  const beatsPerBar = (timeSignature[0] * 4) / timeSignature[1];
+  const score = createScore({ ...meta, source: 'ascii-tab', timeSignature });
+
+  if (!rawText) return score;
+  const staves = findStaves(rawText.split(/\r?\n/));
+
+  let cursorBeat = 0;
   for (const stave of staves) {
-    const { events, beats, nextBeat } = parseStave(stave, beatOffset);
-    allEvents.push(...events);
-    allBeats.push(...beats);
-    beatOffset = nextBeat;
+    const stringMap = getStringMapping(stave);
+    const bodies = stave.map(stripPrefix);
+    const maxLen = Math.max(...bodies.map(b => b.length));
+    const padded = bodies.map(b => b.padEnd(maxLen, '-'));
+
+    const measures = splitMeasures(padded);
+    if (measures) {
+      for (const segments of measures) {
+        const { events, width } = scanMeasure(segments, stringMap);
+        if (events.length === 0) continue;
+        score.events.push(...timeMeasure(events, width, cursorBeat, beatsPerBar));
+        cursorBeat += beatsPerBar;
+      }
+    } else {
+      const { events } = scanMeasure(padded, stringMap);
+      if (events.length === 0) continue;
+      const timed = timeUniform(events, cursorBeat);
+      score.events.push(...timed);
+      cursorBeat = timed.reduce((max, e) => Math.max(max, e.start + e.duration), cursorBeat);
+      cursorBeat = Math.ceil(cursorBeat / beatsPerBar) * beatsPerBar;
+    }
   }
 
-  return { events: allEvents, beats: allBeats };
+  return score;
+}
+
+// Back-compat shim: earlier code consumed { events, beats } directly.
+export function parseTab(rawText, meta = {}) {
+  const score = tabToScore(rawText, meta);
+  const beats = scoreToBeats(score);
+  return { score, events: score.events, beats };
 }

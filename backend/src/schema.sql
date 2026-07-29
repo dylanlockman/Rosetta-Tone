@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS songs (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   title       TEXT NOT NULL,
   artist      TEXT,
-  source_type TEXT NOT NULL CHECK(source_type IN ('tab', 'musicxml', 'url')),
+  source_type TEXT NOT NULL CHECK(source_type IN ('tab', 'musicxml', 'midi', 'url')),
   source_url  TEXT,
   raw_content TEXT NOT NULL,
   parsed_json TEXT,

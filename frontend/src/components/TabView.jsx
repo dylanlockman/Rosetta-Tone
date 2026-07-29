@@ -10,7 +10,7 @@ export default function TabView() {
 
   if (beats.length === 0) {
     return (
-      <div className="text-center text-slate-500 py-4 font-mono text-sm">
+      <div className="text-center text-chrome-500 py-4 font-mono text-sm">
         (Tab will appear here)
       </div>
     );
@@ -22,6 +22,7 @@ export default function TabView() {
   const noteByStringBeat = new Map(); // key: "string-beat" → note
   for (const beat of beats) {
     for (const n of beat.notes) {
+      if (n.string == null || n.fret == null) continue; // piano-only note
       noteByStringBeat.set(`${n.string}-${beat.beatIndex}`, n);
     }
   }
@@ -42,7 +43,7 @@ export default function TabView() {
           >
             {/* String label — aligned with clef area */}
             <span
-              className="text-slate-400 absolute"
+              className="text-chrome-500 absolute"
               style={{ left: 8, width: 16, textAlign: 'right' }}
             >
               {label}
@@ -55,7 +56,7 @@ export default function TabView() {
                 right: 0,
                 top: STRING_ROW_HEIGHT / 2,
                 height: 1,
-                backgroundColor: '#334155',
+                backgroundColor: '#262B38',
               }}
             />
             {/* Fret cells per beat */}
@@ -76,7 +77,7 @@ export default function TabView() {
                     width: 20,
                     textAlign: 'center',
                     color: color,
-                    backgroundColor: '#0f172a',
+                    backgroundColor: '#0B0C10',
                     paddingLeft: 2,
                     paddingRight: 2,
                     border: open ? `1px solid ${color}` : 'none',

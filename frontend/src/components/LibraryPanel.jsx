@@ -10,6 +10,67 @@ const SECTIONS = [
   { key: 'chords', label: 'Chords' },
 ];
 
+const SOURCE_BADGES = {
+  tab: { label: 'TAB', color: '#8A8F9E' },
+  musicxml: { label: 'XML', color: '#6366F1' },
+  midi: { label: 'MIDI', color: '#22C55E' },
+  url: { label: 'URL', color: '#8A8F9E' },
+};
+
+function SongRow({ song, active, onLoad, onDelete }) {
+  const [confirming, setConfirming] = useState(false);
+  const badge = SOURCE_BADGES[song.source_type];
+
+  return (
+    <div
+      className={`group flex items-center justify-between pl-4 pr-2 py-2 cursor-pointer border-l-2 transition-colors ${
+        active
+          ? 'bg-ink-800/70 border-gold-400'
+          : 'border-transparent hover:bg-ink-800/40'
+      }`}
+      onClick={onLoad}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="text-sm text-chrome-100 truncate flex items-center gap-2">
+          <span className="truncate">{song.title}</span>
+          {badge && badge.label !== 'TAB' && (
+            <span
+              className="text-[9px] font-mono px-1 rounded border flex-shrink-0"
+              style={{ color: badge.color, borderColor: `${badge.color}55` }}
+            >{badge.label}</span>
+          )}
+        </div>
+        {song.artist && (
+          <div className="text-xs text-chrome-500 truncate">{song.artist}</div>
+        )}
+      </div>
+      {confirming ? (
+        <div className="flex items-center gap-1 ml-2" onClick={e => e.stopPropagation()}>
+          <button
+            className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+            onClick={onDelete}
+          >Delete</button>
+          <button
+            className="text-[10px] px-1.5 py-0.5 rounded text-chrome-400 hover:text-chrome-100 transition-colors"
+            onClick={() => setConfirming(false)}
+          >Keep</button>
+        </div>
+      ) : (
+        <button
+          className="opacity-0 group-hover:opacity-100 text-chrome-500 hover:text-red-400 ml-2 px-1 transition-all"
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirming(true);
+          }}
+          title="Delete"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
 function MusicSection() {
   const songs = useStore(s => s.songs);
   const activeSong = useStore(s => s.activeSong);
@@ -30,44 +91,25 @@ function MusicSection() {
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto py-1">
         {songs.length === 0 && (
-          <div className="px-4 py-6 text-sm text-slate-500 text-center">
-            No songs yet. Click "+ Add Song" to start.
+          <div className="px-4 py-8 text-sm text-chrome-500 text-center">
+            No songs yet.<br />Paste a tab or drop a MusicXML / MIDI file.
           </div>
         )}
         {songs.map(song => (
-          <div
+          <SongRow
             key={song.id}
-            className={`group flex items-center justify-between px-4 py-2 cursor-pointer border-l-2 transition-colors ${
-              activeSong?.id === song.id
-                ? 'bg-slate-800 border-cyan-400'
-                : 'border-transparent hover:bg-slate-800/50'
-            }`}
-            onClick={() => handleLoadSong(song.id)}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="text-sm text-slate-200 truncate">{song.title}</div>
-              {song.artist && (
-                <div className="text-xs text-slate-500 truncate">{song.artist}</div>
-              )}
-            </div>
-            <button
-              className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 ml-2"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (confirm(`Delete "${song.title}"?`)) deleteSong(song.id);
-              }}
-              title="Delete"
-            >
-              ×
-            </button>
-          </div>
+            song={song}
+            active={activeSong?.id === song.id}
+            onLoad={() => handleLoadSong(song.id)}
+            onDelete={() => deleteSong(song.id)}
+          />
         ))}
       </div>
-      <div className="p-3 border-t border-slate-700">
+      <div className="p-3 border-t border-ink-700/60">
         <button
-          className="w-full px-3 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-medium rounded text-sm"
+          className="w-full px-3 py-2 bg-gold-400 hover:bg-gold-300 text-ink-950 font-semibold rounded-lg text-sm transition-colors"
           onClick={() => setShowModal(true)}
         >
           + Add Song
@@ -75,6 +117,50 @@ function MusicSection() {
       </div>
       {showModal && <AddSongModal onClose={() => setShowModal(false)} />}
     </>
+  );
+}
+
+function ScalePlayControls() {
+  const isScalePlaying = useStore(s => s.isScalePlaying);
+  const setIsScalePlaying = useStore(s => s.setIsScalePlaying);
+  const scaleLoop = useStore(s => s.scaleLoop);
+  const toggleScaleLoop = useStore(s => s.toggleScaleLoop);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => setIsScalePlaying(!isScalePlaying)}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+          isScalePlaying
+            ? 'bg-gold-400 text-ink-950 shadow-glowGold'
+            : 'bg-ink-800 text-gold-400 hover:bg-ink-700'
+        }`}
+        title="Play the visible pattern (Space)"
+      >
+        {isScalePlaying ? (
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+            <rect x="0.5" y="0.5" width="2.6" height="7" rx="0.8" />
+            <rect x="4.9" y="0.5" width="2.6" height="7" rx="0.8" />
+          </svg>
+        ) : (
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+            <path d="M1.5 0.9a0.6 0.6 0 0 1 .92-.51l5 3.1a0.6 0.6 0 0 1 0 1.02l-5 3.1a0.6 0.6 0 0 1-.92-.51V0.9z" />
+          </svg>
+        )}
+        {isScalePlaying ? 'Stop' : 'Play'}
+      </button>
+      <button
+        onClick={toggleScaleLoop}
+        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+          scaleLoop
+            ? 'bg-ink-700 text-gold-400'
+            : 'bg-ink-850 text-chrome-500 hover:text-chrome-300'
+        }`}
+        title="Loop playback"
+      >
+        ∞
+      </button>
+    </div>
   );
 }
 
@@ -92,22 +178,27 @@ function ScaleControls() {
 
   if (!scaleViewActive) return null;
 
-  // Count unique octave runs
   const maxRun = scaleOctaveRuns.reduce((max, r) => Math.max(max, r.runIndex), 0);
   const positionCount = scaleViewMode === 'diagonal'
     ? diagonalPatterns.length
     : cagedPositions.length;
 
   return (
-    <div className="px-3 py-2 border-b border-slate-700 space-y-2">
+    <div className="px-3 py-2.5 border-b border-ink-700/60 space-y-2.5">
+      {/* Playback */}
+      <div className="flex items-center justify-between">
+        <div className="panel-label">Playback</div>
+        <ScalePlayControls />
+      </div>
+
       {/* View mode toggle */}
       <div>
-        <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">View</div>
-        <div className="flex gap-0.5 bg-slate-800 rounded p-0.5 border border-slate-700">
+        <div className="panel-label mb-1">View</div>
+        <div className="flex gap-0.5 bg-ink-850 rounded-lg p-0.5 border border-ink-700/50">
           {[{ v: 'full', l: 'Full' }, { v: 'vertical', l: 'Vertical' }, { v: 'diagonal', l: 'Diagonal' }].map(({ v, l }) => (
             <button key={v} onClick={() => { setScaleViewMode(v); setSelectedCagedPosition(null); }}
-              className={`flex-1 px-1 py-1 text-[10px] rounded font-medium ${
-                scaleViewMode === v ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              className={`flex-1 px-1 py-1 text-[10px] rounded-md font-medium transition-colors ${
+                scaleViewMode === v ? 'bg-ink-700 text-chrome-100' : 'text-chrome-400 hover:text-chrome-100'
               }`}>{l}</button>
           ))}
         </div>
@@ -116,19 +207,19 @@ function ScaleControls() {
       {/* Position filter (CAGED for vertical, diagonal patterns for diagonal) */}
       {(scaleViewMode === 'vertical' || scaleViewMode === 'diagonal') && positionCount > 0 && (
         <div>
-          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Position</div>
+          <div className="panel-label mb-1">Position</div>
           <div className="flex gap-1 flex-wrap">
             <button
               onClick={() => setSelectedCagedPosition(null)}
-              className={`px-2 py-0.5 text-[10px] rounded font-medium ${
-                selectedCagedPosition === null ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400'
+              className={`px-2 py-0.5 text-[10px] rounded-md font-medium transition-colors ${
+                selectedCagedPosition === null ? 'bg-gold-400 text-ink-950' : 'bg-ink-850 text-chrome-400 hover:text-chrome-100'
               }`}
             >All</button>
             {Array.from({ length: positionCount }).map((_, i) => (
               <button key={i}
                 onClick={() => setSelectedCagedPosition(selectedCagedPosition === i ? null : i)}
-                className={`px-2 py-0.5 text-[10px] rounded font-medium ${
-                  selectedCagedPosition === i ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400'
+                className={`px-2 py-0.5 text-[10px] rounded-md font-medium transition-colors ${
+                  selectedCagedPosition === i ? 'bg-gold-400 text-ink-950' : 'bg-ink-850 text-chrome-400 hover:text-chrome-100'
                 }`}
               >{i + 1}</button>
             ))}
@@ -139,12 +230,12 @@ function ScaleControls() {
       {/* Octave run filter */}
       {maxRun > 0 && (
         <div>
-          <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Octave</div>
+          <div className="panel-label mb-1">Octave</div>
           <div className="flex gap-1 flex-wrap">
             <button
               onClick={() => setSelectedOctaveRun(null)}
-              className={`px-2 py-0.5 text-[10px] rounded font-medium ${
-                selectedOctaveRun === null ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400'
+              className={`px-2 py-0.5 text-[10px] rounded-md font-medium transition-colors ${
+                selectedOctaveRun === null ? 'bg-gold-400 text-ink-950' : 'bg-ink-850 text-chrome-400 hover:text-chrome-100'
               }`}
             >All</button>
             {Array.from({ length: maxRun + 1 }).map((_, i) => {
@@ -152,11 +243,11 @@ function ScaleControls() {
               return (
                 <button key={i}
                   onClick={() => setSelectedOctaveRun(selectedOctaveRun === i ? null : i)}
-                  className="px-2 py-0.5 text-[10px] rounded font-medium"
+                  className="px-2 py-0.5 text-[10px] rounded-md font-medium transition-colors"
                   style={{
-                    backgroundColor: selectedOctaveRun === i ? color : '#1e293b',
-                    color: selectedOctaveRun === i ? '#fff' : '#94a3b8',
-                    border: `2px solid ${color}`,
+                    backgroundColor: selectedOctaveRun === i ? color : '#161920',
+                    color: selectedOctaveRun === i ? '#fff' : '#8A8F9E',
+                    border: `1.5px solid ${selectedOctaveRun === i ? color : `${color}66`}`,
                   }}
                 >{i + 1}</button>
               );
@@ -177,17 +268,17 @@ function ScalesSection() {
   return (
     <div className="flex-1 overflow-y-auto">
       {/* Root note selector */}
-      <div className="px-3 py-3 border-b border-slate-700">
-        <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Root Note</div>
+      <div className="px-3 py-3 border-b border-ink-700/60">
+        <div className="panel-label mb-2">Root Note</div>
         <div className="flex flex-wrap gap-1">
           {CHROMATIC_SCALE.map(note => (
             <button
               key={note}
               onClick={() => setSelectedRoot(note)}
-              className={`px-2 py-1 text-xs rounded ${
+              className={`px-2 py-1 text-xs rounded-md transition-colors ${
                 selectedRoot === note
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-gold-400 text-ink-950 font-semibold'
+                  : 'bg-ink-850 text-chrome-400 hover:bg-ink-800 hover:text-chrome-100'
               }`}
             >
               {note}
@@ -196,7 +287,7 @@ function ScalesSection() {
         </div>
       </div>
 
-      {/* Scale controls (view mode, position filter, octave filter) */}
+      {/* Scale controls (playback, view mode, position filter, octave filter) */}
       <ScaleControls />
 
       {/* Scale list */}
@@ -208,22 +299,22 @@ function ScalesSection() {
               key={scale.id}
               className={`px-4 py-2 cursor-pointer border-l-2 transition-colors ${
                 isActive
-                  ? 'bg-slate-800 border-cyan-400'
-                  : 'border-transparent hover:bg-slate-800/50'
+                  ? 'bg-ink-800/70 border-gold-400'
+                  : 'border-transparent hover:bg-ink-800/40'
               }`}
               onClick={() => loadScale(scale.name, selectedRoot)}
             >
-              <div className="text-sm text-slate-200">{scale.name}</div>
+              <div className="text-sm text-chrome-100">{scale.name}</div>
               {isActive && activeScale.notes && (
-                <div className="text-xs text-slate-500 mt-0.5">
-                  {activeScale.notes.join(' - ')}
+                <div className="text-xs text-chrome-500 mt-0.5 font-mono">
+                  {activeScale.notes.join(' · ')}
                 </div>
               )}
             </div>
           );
         })}
         {scales.length === 0 && (
-          <div className="px-4 py-6 text-sm text-slate-500 text-center">
+          <div className="px-4 py-6 text-sm text-chrome-500 text-center">
             Loading scales...
           </div>
         )}
@@ -238,7 +329,7 @@ function ChordsSection() {
   const setSelectedChord = useStore(s => s.setSelectedChord);
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto py-1">
       {chordLibrary.map(chord => {
         const isActive = selectedChord?.id === chord.id;
         return (
@@ -246,17 +337,17 @@ function ChordsSection() {
             key={chord.id}
             className={`px-4 py-2 cursor-pointer border-l-2 transition-colors ${
               isActive
-                ? 'bg-slate-800 border-cyan-400'
-                : 'border-transparent hover:bg-slate-800/50'
+                ? 'bg-ink-800/70 border-gold-400'
+                : 'border-transparent hover:bg-ink-800/40'
             }`}
             onClick={() => setSelectedChord(chord)}
           >
-            <div className="text-sm text-slate-200">{chord.name}</div>
+            <div className="text-sm text-chrome-100">{chord.name}</div>
           </div>
         );
       })}
       {chordLibrary.length === 0 && (
-        <div className="px-4 py-6 text-sm text-slate-500 text-center">
+        <div className="px-4 py-6 text-sm text-chrome-500 text-center">
           Loading chords...
         </div>
       )}
@@ -269,20 +360,23 @@ export default function LibraryPanel() {
   const setActiveSection = useStore(s => s.setActiveSection);
 
   return (
-    <aside className="w-64 border-r border-slate-700 bg-slate-900 flex flex-col">
+    <aside className="w-64 border-r border-ink-700/60 bg-ink-900 flex flex-col flex-shrink-0">
       {/* Tab bar */}
-      <div className="flex border-b border-slate-700">
+      <div className="flex border-b border-ink-700/60">
         {SECTIONS.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setActiveSection(key)}
-            className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors ${
+            className={`flex-1 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors relative ${
               activeSection === key
-                ? 'text-cyan-400 border-b-2 border-cyan-400 bg-slate-800/50'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'text-gold-400'
+                : 'text-chrome-500 hover:text-chrome-300'
             }`}
           >
             {label}
+            {activeSection === key && (
+              <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-gold-400 rounded-full" />
+            )}
           </button>
         ))}
       </div>

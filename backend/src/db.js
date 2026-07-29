@@ -20,9 +20,24 @@ if (existsSync(dbPath)) {
   db = new SQL.Database();
 }
 
+// Migration: older DB files have a songs.source_type CHECK that predates
+// 'midi'. SQLite can't alter a CHECK, so rebuild the table once if needed.
+const songsDDL = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='songs'");
+const existingDDL = songsDDL[0]?.values?.[0]?.[0] ?? null;
+if (existingDDL && !existingDDL.includes("'midi'")) {
+  db.run('ALTER TABLE songs RENAME TO songs_migrate_old');
+}
+
 // Run schema
 const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
 db.run(schema);
+
+// Finish migration: copy rows into the rebuilt table, then drop the old one
+const oldTable = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='songs_migrate_old'");
+if (oldTable.length > 0) {
+  db.run('INSERT INTO songs SELECT * FROM songs_migrate_old');
+  db.run('DROP TABLE songs_migrate_old');
+}
 
 // Seed reference data
 seedDatabase(db);

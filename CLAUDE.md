@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Tech Stack
 
-- **Frontend:** React (Vite) + Tailwind CSS + Zustand + Axios + VexFlow 4.x
+- **Frontend:** React (Vite) + Tailwind CSS + Zustand + Axios + VexFlow 5.x + @tonejs/midi + fflate
 - **Backend:** Node.js + Express + sql.js (pure-JS SQLite, no native compilation needed)
 - **Package manager:** npm
 
@@ -32,23 +32,33 @@ The Vite dev server proxies `/api` → `http://localhost:4000`, so the frontend 
 
 ### Color System (Critical Design Constraint)
 
-Every pitch class maps to a fixed color used consistently across ALL views (fretboard dots, piano keys, VexFlow noteheads). The single source of truth is `frontend/src/utils/noteColors.js`. Any component rendering notes must consume `getNoteColor()` from there — never hard-code note colors.
+Notes are colored **by fretting finger** (1=index red, 2=middle blue, 3=ring green, 4=pinky yellow, T=thumb purple, 0=open neutral) consistently across ALL views (fretboard dots, piano keys, VexFlow noteheads, tab numerals). Source of truth: `frontend/src/utils/noteColors.js` (`getFingerColor()`). Scale views instead use ROYGBIV octave-run colors from `frontend/src/utils/scaleColors.js`. Never hard-code note colors in components.
 
-### Core Data Flow
+### Design System ("Studio Instrument")
+
+Warm charcoal chassis with a single gold accent; the note colors are the loudest thing on screen. Defined in `frontend/tailwind.config.js`: `ink-*` (backgrounds/borders), `chrome-*` (text), `gold-*` (accent). Fonts (Google Fonts, loaded in `index.html`): **Instrument Serif** italic for the wordmark/chords, **Instrument Sans** for UI, **JetBrains Mono** for tab numerals and transport digits. Shared CSS primitives (`.panel-label`, `.anim-fade-up`, `.note-transition`, `pop-in` keyframes) live in `src/index.css`.
+
+### Core Data Flow — the canonical Score model
+
+Every input format is parsed **once at ingest** into a canonical Score (`frontend/src/utils/score.js`), which is stored in `songs.parsed_json` and is the only thing views consume:
 
 ```
-ASCII Tab (raw_content in DB)
-    ↓ parseTab()  [client-side, frontend/src/utils/tabParser.js]
-[{note, octave, string, fret, duration, beatIndex}]
-    ↓
-Zustand store (noteEvents)
-    ↓
-Fretboard / Piano / NotationView (all subscribe)
+ASCII tab ──tabToScore()────────┐   tab knows string/fret → infers durations
+MusicXML ──musicXmlToScore()────┤   sheet knows durations → infers string/fret
+MIDI ──────midiToScore()────────┘   (utils/importers/*, utils/fretInference.js)
+              ↓
+Score { meta: {bpm, timeSignature, keyRoot…}, events: [{start, duration, midi,
+        note, octave, string, fret, lyric, chordSymbol}] }   (start/duration in quarter beats)
+              ↓ POSTed as parsed_json at ingest; loadSong() prefers it, falls
+              ↓ back to re-parsing raw_content for legacy rows
+scoreToBeats() → beats [{beatIndex, start, duration, notes[]}] in Zustand store
+              ↓
+Fretboard / Piano / NotationView / TabView / TransportBar (all subscribe)
 ```
 
-The tab parser runs **client-side only** in the MVP. The `songs.parsed_json` column exists in the schema but is not yet populated; server-side parsing/caching can be added later without changing the API contract.
-
-Notes that share the same `beatIndex` are simultaneous (a chord). Components group on this field — the notation view renders them as multi-key VexFlow `StaveNote`s, the fretboard/piano just light all positions.
+- **Fret inference** (`utils/fretInference.js`): beam search assigning string/fret to pitch-only sources; events outside guitar range keep `string/fret = null` and render only on the piano (views must guard for null).
+- **Tab timing inference** (`utils/tabParser.js`): bar lines make each measure one bar of the time signature, event starts proportional to column position (sixteenth-quantized); barline-free staves fall back to uniform eighths.
+- Playback (`App.jsx`) steps beats using real start-time deltas, so rhythm follows the source. `playbackRate` (½×/¾×/1×) is a practice speed multiplier; there is no subdivision setting anymore.
 
 ### String Numbering
 
@@ -57,14 +67,19 @@ Throughout the codebase: **string 1 = high E, string 6 = low E**. `STANDARD_TUNI
 ### Layout
 
 ```
-┌─ Header (Guitar/Piano toggle) ──────────┐
-│┌─Library─┬─ NotationView (VexFlow) ─────┐│
-││         ├──────────────────────────────┤│
-││         │  InstrumentView              ││
-││         │  (Fretboard or Piano)        ││
-│└─────────┴──────────────────────────────┘│
-└──────────────────────────────────────────┘
+┌─ Header (wordmark · song/scale · sound voice toggle) ─┐
+│┌─Library─┬─ Piano (88-key, always visible) ──────────┐│
+││ Music   ├────────────────────────────────────────────┤│
+││ Scales  │  Context area: SongView (staff+tab+playhead)│
+││ Chords  │  or ScaleView or ChordView or EmptyState   ││
+││         ├────────────────────────────────────────────┤│
+││         │  Fretboard (24-fret, always visible)       ││
+│└─────────┴────────────────────────────────────────────┘│
+├─ TransportBar (play · beats · scrubber · BPM · speed) ─┤
+└────────────────────────────────────────────────────────┘
 ```
+
+Keyboard: **Space** play/pause (song or scale, context-aware), **←/→** step beat, **Home** rewind. Shortcuts are ignored while typing in inputs.
 
 ### API
 
@@ -77,6 +92,8 @@ All routes mounted under `/api`. See `backend/src/routes/`:
 
 - File: `backend/data/gearboard.db` (gitignored, auto-created on startup)
 - Schema in `backend/src/schema.sql` — three tables: `songs`, `scales`, `chords`
+- `songs.source_type` ∈ `tab | musicxml | midi | url`; `db.js` contains a one-time table rebuild migration for DB files created before `'midi'` was in the CHECK constraint
+- `songs.raw_content` stores the original input (tab text, MusicXML text, or base64 for .mid/.mxl); `songs.parsed_json` stores the canonical Score
 - Seed data in `backend/src/seed.js` runs every startup with `INSERT OR IGNORE`: 8 scales + 20 common chords
 - The `db.js` module exports helpers `all()`, `get()`, `run()` that wrap the sql.js API and handle persistence on every write
 
@@ -105,16 +122,27 @@ The Scale Explorer is available in the Library panel's Scales tab. Features:
 - **Octave run filter**: ROYGBIV-colored buttons to filter by octave pass
 - Boundary notes (where two octave runs meet) render with a 45° diagonal split on both fretboard and piano
 - Scale data computed in `frontend/src/utils/scalePositions.js` (CAGED + diagonal), colors in `frontend/src/utils/scaleColors.js`
+- **Scale playback**: Play/loop buttons in the Scales sidebar (Space also works). Plays *whatever is currently visible* — the selected CAGED box, the diagonal run, or the full/octave-filtered scale — as eighth notes at the transport BPM, ascending then descending. Sequence built in `frontend/src/utils/scaleSequence.js`; a traveling gold halo highlights the active note on both fretboard and piano (`scalePlayheadNote` in the store). Changing filters mid-playback restarts on the new pattern.
 
 ## Piano
 
 Full 88-key piano (A0–C8), inline sticky by default. Labels shown only on C keys for compactness.
 
+## Song Ingestion
+
+The Add Song modal (`frontend/src/components/AddSongModal.jsx`) has two modes:
+- **Paste Tab** — ASCII tab textarea (bar lines give the parser real timing)
+- **MusicXML / MIDI File** — drag-drop or browse for `.musicxml/.xml/.mxl/.mid/.midi`; shows a parse preview (notes/beats/bars/BPM/key/fretboard coverage) before saving
+
+Both build the canonical Score client-side and POST it as `parsed_json`. The Claude-Code-as-scraper flow (`prompts/process-tab-url.md`) still POSTs raw tab only; `loadSong()` falls back to client-side parsing for those rows.
+
 ## What's Deferred (Not Yet Built)
 
 - Chord Encyclopedia panel (chords list exists but no fingering diagrams/fretboard previews)
-- Bass clef on the notation view (treble only currently)
-- Duration inference in the tab parser (everything is quarter notes, subdivision selector compensates)
-- MusicXML import
+- Bass clef / grand staff on the notation view (treble only currently)
+- Tab technique semantics (h/p/b/s are tolerated by the parser but not rendered or sounded)
+- A/B loop region for songs (scales have loop; songs don't yet)
+- Web MIDI input, sampled instrument audio, metronome/count-in
+- Lyrics/chord-symbol display in SongView (the Score model already carries `lyric`/`chordSymbol` from MusicXML)
 - GCP / Cloud SQL deployment
 - Settings panel for display preferences

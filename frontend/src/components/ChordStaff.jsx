@@ -30,13 +30,13 @@ export default function ChordStaff({ chord }) {
     const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
     renderer.resize(totalWidth, totalHeight);
     const context = renderer.getContext();
-    context.setFillStyle('#cbd5e1');
-    context.setStrokeStyle('#cbd5e1');
+    context.setFillStyle('#B9BCC5');
+    context.setStrokeStyle('#B9BCC5');
 
     const stave = new Stave(10, 20, staveWidth);
     stave.addClef('treble');
     stave.setContext(context);
-    stave.setStyle({ strokeStyle: '#cbd5e1', fillStyle: '#cbd5e1' });
+    stave.setStyle({ strokeStyle: '#B9BCC5', fillStyle: '#B9BCC5' });
     stave.draw();
 
     const keys = pitches.map(p => `${p.note.toLowerCase()}/${p.octave}`);
@@ -53,7 +53,7 @@ export default function ChordStaff({ chord }) {
 
     // Color by primary finger
     const fingered = pitches.find(p => p.finger > 0);
-    const color = fingered ? getFingerColor(fingered.finger) : '#22d3ee';
+    const color = fingered ? getFingerColor(fingered.finger) : '#F5B848';
     staveNote.setStyle({ fillStyle: color, strokeStyle: color });
 
     const voice = new Voice({ numBeats: 4, beatValue: 4 });
@@ -63,12 +63,12 @@ export default function ChordStaff({ chord }) {
   }, [chord]);
 
   if (!chord) {
-    return <div className="text-slate-500 text-sm p-4">Select a chord to view notation.</div>;
+    return <div className="text-chrome-500 text-sm p-4">Select a chord to view notation.</div>;
   }
 
   return (
-    <div className="bg-slate-800/30 rounded-lg p-2">
-      <div className="text-xs text-slate-400 mb-1 px-2">{chord.name}</div>
+    <div className="bg-ink-900/60 rounded-lg p-2">
+      <div className="text-xs text-chrome-400 mb-1 px-2">{chord.name}</div>
       <div ref={containerRef} />
     </div>
   );

@@ -40,13 +40,13 @@ export default function ScaleStaff({ scaleNotes, root }) {
     const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
     renderer.resize(totalWidth, totalHeight);
     const context = renderer.getContext();
-    context.setFillStyle('#cbd5e1');
-    context.setStrokeStyle('#cbd5e1');
+    context.setFillStyle('#B9BCC5');
+    context.setStrokeStyle('#B9BCC5');
 
     const stave = new Stave(10, 20, staveWidth);
     stave.addClef('treble');
     stave.setContext(context);
-    stave.setStyle({ strokeStyle: '#cbd5e1', fillStyle: '#cbd5e1' });
+    stave.setStyle({ strokeStyle: '#B9BCC5', fillStyle: '#B9BCC5' });
     stave.draw();
 
     const vexNotes = noteData.map(({ note, octave }) => {
@@ -57,7 +57,7 @@ export default function ScaleStaff({ scaleNotes, root }) {
       } else if (note.includes('b')) {
         staveNote.addModifier(new Accidental('b'), 0);
       }
-      staveNote.setStyle({ fillStyle: '#22d3ee', strokeStyle: '#22d3ee' });
+      staveNote.setStyle({ fillStyle: '#8FB8FF', strokeStyle: '#8FB8FF' });
       return staveNote;
     });
 
@@ -76,7 +76,7 @@ export default function ScaleStaff({ scaleNotes, root }) {
         label.setAttribute('x', x);
         label.setAttribute('y', labelY);
         label.setAttribute('text-anchor', 'middle');
-        label.setAttribute('fill', '#22d3ee');
+        label.setAttribute('fill', '#8FB8FF');
         label.setAttribute('font-size', '11');
         label.setAttribute('font-family', 'ui-sans-serif, system-ui');
         label.setAttribute('font-weight', '600');
@@ -87,8 +87,8 @@ export default function ScaleStaff({ scaleNotes, root }) {
   }, [scaleNotes, root]);
 
   if (!scaleNotes || scaleNotes.length === 0) {
-    return <div className="text-slate-500 text-sm p-4">Select a scale to view notation.</div>;
+    return <div className="text-chrome-500 text-sm p-4">Select a scale to view notation.</div>;
   }
 
-  return <div ref={containerRef} className="bg-slate-800/30 rounded-lg p-2" />;
+  return <div ref={containerRef} className="bg-ink-900/60 rounded-lg p-2" />;
 }
