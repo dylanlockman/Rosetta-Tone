@@ -4,8 +4,9 @@ import Header from './components/Header.jsx';
 import LibraryPanel from './components/LibraryPanel.jsx';
 import TrackContainer from './components/TrackContainer.jsx';
 import TransportBar from './components/TransportBar.jsx';
-import { playBeat, unlockAudio } from './utils/audio.js';
+import { playBeat, unlockAudio, prefetchNotes } from './utils/audio.js';
 import { buildScaleSequence } from './utils/scaleSequence.js';
+import { noteToMidi } from './utils/musicTheory.js';
 
 export default function App() {
   const fetchChordLibrary = useStore(s => s.fetchChordLibrary);
@@ -19,6 +20,7 @@ export default function App() {
   const instrument = useStore(s => s.instrument);
   const audioEnabled = useStore(s => s.audioEnabled);
   const songSection = useStore(s => s.songSection);
+  const activeScale = useStore(s => s.activeScale);
 
   const lastPlayedBeat = useRef(-1);
 
@@ -26,6 +28,25 @@ export default function App() {
     fetchChordLibrary();
     fetchScales();
   }, [fetchChordLibrary, fetchScales]);
+
+  // Warm the sample cache for everything currently on screen, so playback
+  // uses real instrument sounds from the first note where possible.
+  useEffect(() => {
+    const midis = new Set();
+    for (const b of beats) {
+      for (const n of b.notes) {
+        const m = n.midi ?? noteToMidi(n.note, n.octave);
+        if (m != null) midis.add(m);
+      }
+    }
+    if (activeScale) {
+      for (const r of useStore.getState().scaleOctaveRuns) {
+        const m = noteToMidi(r.pitchClass, r.octave);
+        if (m != null) midis.add(m);
+      }
+    }
+    if (midis.size > 0) prefetchNotes(midis, instrument);
+  }, [beats, activeScale, instrument]);
 
   // Play audio when currentBeat changes (scrubbing or playback).
   // Note duration comes from the score's real event durations.
@@ -103,7 +124,6 @@ export default function App() {
   // The sequence is rebuilt from live filter state, so changing the view mode,
   // position, or octave filter mid-playback restarts on the new pattern.
   const isScalePlaying = useStore(s => s.isScalePlaying);
-  const activeScale = useStore(s => s.activeScale);
   const scaleViewMode = useStore(s => s.scaleViewMode);
   const selectedCagedPosition = useStore(s => s.selectedCagedPosition);
   const selectedOctaveRun = useStore(s => s.selectedOctaveRun);

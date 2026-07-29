@@ -136,6 +136,10 @@ The Scale Explorer is available in the Library panel's Scales tab. Features:
 
 Full 88-key piano (A0–C8), inline sticky by default. Labels shown only on C keys for compactness.
 
+## Audio
+
+`utils/audio.js` plays real FluidR3 soundfont samples (acoustic grand piano / steel guitar) fetched lazily from jsDelivr and cached as decoded buffers; the oscillator synth remains as an instant fallback while a note's sample loads or when offline (one failed fetch disables further attempts for the session). `prefetchNotes()` warms the cache for everything on screen (wired via an App effect on beats/scale/instrument).
+
 ## Song Ingestion
 
 The Add Song modal (`frontend/src/components/AddSongModal.jsx`) has two modes:
@@ -150,7 +154,7 @@ Both build the canonical Score client-side and POST it as `parsed_json`. The Cla
 - Bass clef / grand staff on the notation view (treble only currently)
 - Tab technique semantics (h/p/b/s are tolerated by the parser but not rendered or sounded)
 - A/B loop region for songs (scales have loop; songs don't yet)
-- Web MIDI input, sampled instrument audio, metronome/count-in
+- Web MIDI input, metronome/count-in
 - Lyrics/chord-symbol display in SongView (the Score model already carries `lyric`/`chordSymbol` from MusicXML)
 - GCP / Cloud SQL deployment
 - Settings panel for display preferences

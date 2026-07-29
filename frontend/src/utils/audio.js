@@ -1,7 +1,71 @@
-// Lightweight Web Audio synthesis for piano + guitar timbres.
-// No samples, no dependencies — just oscillators with shaped envelopes.
+// Audio engine: sampled instruments with a synthesized fallback.
+//
+// Real FluidR3 soundfont notes (piano + steel guitar) are fetched lazily
+// from jsDelivr and cached as decoded buffers. Until a note's sample has
+// arrived — or if the machine is offline — the original oscillator synth
+// plays instead, so sound is never missing, it just gets nicer.
 
 import { noteToMidi } from './musicTheory.js';
+
+const SOUNDFONT_BASE = 'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/FluidR3_GM';
+const INSTRUMENT_FONTS = {
+  piano: 'acoustic_grand_piano-mp3',
+  guitar: 'acoustic_guitar_steel-mp3',
+};
+// Soundfont files use flat names: C#4 is stored as Db4.mp3
+const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+const sampleCache = new Map();   // "instrument:midi" → AudioBuffer
+const samplePending = new Set(); // in-flight fetches
+let sampleFetchBroken = false;   // offline / CDN unreachable → stop trying
+
+function sampleUrl(instrument, midi) {
+  const name = FLAT_NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
+  return `${SOUNDFONT_BASE}/${INSTRUMENT_FONTS[instrument]}/${name}.mp3`;
+}
+
+async function loadSample(instrument, midi) {
+  const key = `${instrument}:${midi}`;
+  if (sampleCache.has(key) || samplePending.has(key) || sampleFetchBroken) return;
+  if (midi < 21 || midi > 108 || !INSTRUMENT_FONTS[instrument]) return;
+  samplePending.add(key);
+  try {
+    const res = await fetch(sampleUrl(instrument, midi));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    const audio = await getCtx().decodeAudioData(buf);
+    sampleCache.set(key, audio);
+  } catch {
+    // One network failure usually means offline — don't hammer the CDN.
+    sampleFetchBroken = true;
+  } finally {
+    samplePending.delete(key);
+  }
+}
+
+// Warm the cache for a set of midi pitches (called when a song/scale loads).
+export function prefetchNotes(midis, instrument = 'piano') {
+  for (const midi of midis) {
+    if (midi != null) loadSample(instrument, midi);
+  }
+}
+
+// Play a cached sample with a gentle release at the requested duration.
+function playSample(buffer, duration) {
+  const c = getCtx();
+  const now = c.currentTime;
+  const src = c.createBufferSource();
+  src.buffer = buffer;
+  const gain = c.createGain();
+  gain.gain.setValueAtTime(1, now);
+  const hold = Math.max(0.08, duration);
+  gain.gain.setValueAtTime(1, now + hold);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + hold + 0.25);
+  src.connect(gain);
+  gain.connect(masterGain);
+  src.start(now);
+  src.stop(now + hold + 0.3);
+}
 
 let ctx = null;
 let masterGain = null;
@@ -143,11 +207,17 @@ function playGuitar(freq, duration = 1.4) {
 
 export function playBeat(notes, instrument = 'piano', duration = 0.6) {
   if (!notes || notes.length === 0) return;
-  const play = instrument === 'guitar' ? playGuitar : playPiano;
+  const synth = instrument === 'guitar' ? playGuitar : playPiano;
   for (const n of notes) {
-    const midi = noteToMidi(n.note, n.octave);
+    const midi = n.midi ?? noteToMidi(n.note, n.octave);
     if (midi == null) continue;
-    play(midiToFreq(midi), duration);
+    const sample = sampleCache.get(`${instrument}:${midi}`);
+    if (sample) {
+      playSample(sample, duration);
+    } else {
+      synth(midiToFreq(midi), duration);
+      loadSample(instrument, midi); // next hit sounds real
+    }
   }
 }
 
