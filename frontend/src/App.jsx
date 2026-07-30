@@ -4,6 +4,7 @@ import Header from './components/Header.jsx';
 import LibraryPanel from './components/LibraryPanel.jsx';
 import TrackContainer from './components/TrackContainer.jsx';
 import TransportBar from './components/TransportBar.jsx';
+import Toast from './components/Toast.jsx';
 import { playBeat, unlockAudio, prefetchNotes } from './utils/audio.js';
 import { buildScaleSequence } from './utils/scaleSequence.js';
 import { noteToMidi } from './utils/musicTheory.js';
@@ -213,6 +214,7 @@ export default function App() {
         <TrackContainer />
       </div>
       <TransportBar />
+      <Toast />
     </div>
   );
 }

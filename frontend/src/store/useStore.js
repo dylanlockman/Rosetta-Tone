@@ -90,6 +90,7 @@ export const useStore = create((set, get) => ({
     set({ transpose: clamped, beats: deriveBeats(score, clamped, chordLibrary) });
   },
   setHoverMidi: (hoverMidi) => set({ hoverMidi }),
+  clearError: () => set({ error: null }),
   setSongSection: (idx) => {
     const { sections } = get();
     if (idx == null || !sections[idx]) {
@@ -218,7 +219,17 @@ export const useStore = create((set, get) => ({
         ...(score.meta?.bpm ? { bpm: Math.max(20, Math.min(300, Math.round(score.meta.bpm))) } : {}),
       });
     } catch (e) {
-      set({ error: e.message, loading: false });
+      if (e.response?.status === 404) {
+        // The visible library row went stale (song replaced or removed
+        // elsewhere) — self-heal the list instead of failing silently.
+        await get().fetchSongs();
+        set({
+          error: 'That song entry was out of date — library refreshed, please try again.',
+          loading: false,
+        });
+      } else {
+        set({ error: e.message, loading: false });
+      }
     }
   },
 
